@@ -3,8 +3,8 @@
 
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabaseBrowser";
+import { useMemo, useState } from "react";
+
 
 
 type ConnectionProfile = {
@@ -46,8 +46,6 @@ seeking_genders: string[] | null;
 
 };
 
-const sparkleIntros = ["✨ Meet", "💗 Meet", "🌸 Meet", "💫 Meet", "🌟 Meet", "💞 Meet", "🌼 Meet", "💖 Meet"];
-
 function calculateAge(dob: string | null): number | null {
   if (!dob) return null;
   const birth = new Date(dob);
@@ -80,36 +78,6 @@ function normalizePhotos(primary: string | null, raw: string | string[] | null):
 
   if (list.length === 0 && primary) list = [primary];
   return list;
-}
-
-function buildMiraNote(
-  profile: Pick<
-    ConnectionProfile,
-    "screen_name" | "pronouns" | "interests" | "match_preferences" | "compatibility_alignments"
-  >
-) {
-  const name = profile.screen_name || "this person";
-
-  // Tiny helper: pick a natural subject pronoun
-  const raw = (profile.pronouns ?? "").toLowerCase();
-  const subj = raw.includes("she") ? "She" : raw.includes("he") ? "He" : "They";
-  const obj = raw.includes("she") ? "her" : raw.includes("he") ? "him" : "them";
-  const poss = raw.includes("she") ? "her" : raw.includes("he") ? "his" : "their";
-
-  const interests = (profile.interests ?? []).filter(Boolean).slice(0, 3);
-  const interestsLine =
-    interests.length > 0
-      ? `${subj} seems to enjoy ${interests.join(", ")} — which hints at a real-life rhythm that’s easy to join. `
-      : "";
-
-  const aligns = profile.compatibility_alignments ?? {};
-  const alignKeys = Object.keys(aligns).slice(0, 2);
-  const alignLine =
-    alignKeys.length > 0
-      ? `${poss} compatibility highlights suggest ${subj.toLowerCase()}’ll do best with someone who values steady communication and shared pacing. `
-      : `${subj} may do best with someone who values steady communication and shared pacing. `;
-
-  return `Mira’s read: ${name} comes across as intentional and grounded. ${interestsLine}${alignLine}If you’re curious, a simple first message that references something specific you noticed is the sweetest start.`;
 }
 
 function buildTimeSpentSummary(interests: string[]): string {
@@ -246,10 +214,6 @@ function buildLookingFor(
 
 export function ConnectionProfileView({
   profile,
-  mode,
-  onStartChat,
-  onSendWave,
-  onBack,
 }: {
   profile: ConnectionProfile;
   mode: "connection" | "preview";
@@ -257,11 +221,6 @@ export function ConnectionProfileView({
   onSendWave?: (type?: "wave") => void;
   onBack?: () => void;
 }) {
-  const sparkle = useMemo(
-    () => sparkleIntros[Math.floor(Math.random() * sparkleIntros.length)],
-    []
-  );
-
 
   const photos = useMemo(
     () => normalizePhotos(profile.primary_photo_url, profile.photos),
@@ -278,15 +237,6 @@ export function ConnectionProfileView({
     profile.city || profile.region ? [profile.city, profile.region].filter(Boolean).join(", ") : null;
 
   const lookingFor = buildLookingFor(profile);
-console.log("LookingFor debug", {
-  relationship_intent: profile.relationship_intent,
-  connection_preference: (profile as any).connection_preference,
-  looking_for_age_min: (profile as any).looking_for_age_min,
-  looking_for_age_max: (profile as any).looking_for_age_max,
-  seeking_genders: (profile as any).seeking_genders,
-  match_preferences: profile.match_preferences,
-  lookingFor,
-});
 
   return (
     <section className="w-full text-sm leading-relaxed text-[#4A5878]">
