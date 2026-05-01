@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+:root {
+  /* Base */
+  --background: #ffffff;
+  --foreground: #5c76bd;
+
+  /* Inputs */
+  --input-bg: #ffffff;
+  --input-text: #171717;
+  --input-placeholder: #92aee5; /* slate-500 */
+  --input-border: #d1d5db; /* gray-300 */
+
+  /* Panels / cards */
+  --panel-bg: #ffffff;
+  --panel-border: #e5e7eb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-input-bg: var(--input-bg);
+  --color-input-text: var(--input-text);
+  --color-input-placeholder: var(--input-placeholder);
+  --color-input-border: var(--input-border);
+
+  --color-panel-bg: var(--panel-bg);
+  --color-panel-border: var(--panel-border);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+  --background: #ffffff;
+  --foreground: #d1daf3;
+
+  --panel-bg: #ffffff;
+  --panel-border: #e5e7eb;
+
+  --input-bg: #ffffff;
+  --input-text: #111827;
+  --input-placeholder: #6b7280;
+  --input-border: #d1d5db;
+
+  --btn-bg: #515151;
+  --btn-text: #ffffff;
+  --btn-border: #0f172a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #9eb8ec;
+    --foreground: #1e396e;
+
+    --panel-bg: #fbfcff;
+    --panel-border: #1f2937;
+
+    --input-bg: #0b1220;
+    --input-text: #cfddf8;
+    --input-placeholder: #94a3b8;
+    --input-border: #334155;
+
+    --btn-bg: #e5e7eb;
+    --btn-text: #0b1220;
+    --btn-border: #e5e7eb;
+  }
+}
+
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
