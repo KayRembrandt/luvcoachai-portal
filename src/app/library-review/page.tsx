@@ -144,6 +144,7 @@ const handleNewCategory = () => {
 
   setSelectedCategory(null);
   setSelectedLesson(null);
+  setIsCreatingCategory(true);
 
   setDraftCategory({
     id: "",
@@ -322,11 +323,16 @@ const handleSaveCategory = async () => {
 
               {activeCategoryRecord && (
                 <div className="mt-4 space-y-3 border-t pt-4">
-<PortalButton
-  onClick={() => setIsCreatingCategory((prev) => !prev)}
->
-  {isCreatingCategory ?  "Edit Category" : "Close Category Editor"}
-</PortalButton>
+{isCreatingCategory && (
+  <PortalButton
+    onClick={() => {
+      setIsCreatingCategory(false);
+      setDraftCategory(null);
+    }}
+  >
+    Cancel New Category
+  </PortalButton>
+)}
 
 <input
   className="w-full rounded-lg border px-3 py-2"
@@ -339,7 +345,11 @@ const handleSaveCategory = async () => {
                     className="w-full rounded-lg border px-3 py-2"
                     type="number"
                     value={activeCategoryRecord.display_order}
-onChange={(e) => updateActiveCategory({ slug: e.target.value })}
+                    onChange={(e) =>
+                      updateActiveCategory({
+                        display_order: e.target.value ? Number(e.target.value) : 0,
+                      })
+                    }
                     placeholder="Display order"
                   />
 
@@ -382,7 +392,12 @@ onChange={(e) => updateActiveCategory({ description: e.target.value || ""})}
                 {categories.map((cat) => (
                   <PortalButton
                     key={cat.id}
-                    onClick={() => setSelectedCategory(cat.id)}
+                    onClick={() => {
+                      setSelectedCategory(cat.id);
+                      setSelectedLesson(null);
+                      setIsCreatingCategory(false);
+                      setDraftCategory(null);
+                    }}
                     active={selectedCategory === cat.id}
                     className="block w-full rounded-lg border px-3 py-2 text-left hover:opacity-80"
                   >

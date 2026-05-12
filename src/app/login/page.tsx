@@ -6,9 +6,57 @@ import { supabaseBrowser } from "@/lib/supabaseBrowser";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
+type StaffRow = {
+  id: string;
+  auth_user_id?: string | null;
+  role?: string | null;
+  is_active?: boolean | null;
+  status?: string | null;
+  first_name?: string | null;
+};
+
+const STAFF_SELECT = "id, auth_user_id, role, is_active, status, first_name";
+
+const clean = (value: unknown) => String(value ?? "").trim().toLowerCase();
+
 function isAllowedStaffStatus(status: unknown) {
-  const s = String(status ?? "").toLowerCase();
-  return s === "active" || s === "approved";
+  const s = clean(status);
+
+  // If status is blank/null but is_active is true, do not block the person.
+  if (!s) return true;
+
+  return ["active", "approved", "hired", "enabled"].includes(s);
+}
+
+function isAllowedStaffRole(role: unknown) {
+  const r = clean(role);
+
+  // The staff table itself is the access gate. A blank role should not block
+  // a valid active staff record.
+  if (!r) return true;
+
+  return [
+    "owner",
+    "admin",
+    "staff",
+    "support",
+    "moderator",
+    "reviewer",
+    "content_manager",
+    "photo_reviewer",
+    "library_reviewer",
+    "developer",
+  ].includes(r);
+}
+
+async function getStaffRow(authUserId: string) {
+  const { data, error } = await supabaseBrowser
+    .from("staff")
+    .select(STAFF_SELECT)
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+
+  return { staffRow: (data as StaffRow | null) ?? null, error };
 }
 
 export default function LoginPage() {
@@ -21,72 +69,78 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    console.log("HANDLE SUBMIT FIRED");
+
+    const loginEmail = email.trim().toLowerCase();
 
     setError(null);
     setSubmitting(true);
 
     try {
-console.log("STEP 1: submit fired");
+      await supabaseBrowser.auth.signOut().catch((err) => {
+        console.warn("Pre-login signOut warning:", err);
+      });
 
-await supabaseBrowser.auth.signOut().catch((err) => {
-  console.warn("Pre-login signOut warning:", err);
-});
+      const { data, error: signInError } =
+        await supabaseBrowser.auth.signInWithPassword({
+          email: loginEmail,
+          password,
+        });
 
-console.log("STEP 2: calling signInWithPassword");
+      if (signInError) {
+        setError(signInError.message || "Something went wrong signing you in.");
+        setSubmitting(false);
+        return;
+      }
 
-const { data, error: signInError } =
-  await supabaseBrowser.auth.signInWithPassword({
-    email: email.trim(),
-    password,
-  });
+      const sessionUser = data.session?.user ?? null;
 
-console.log("STEP 3: signInWithPassword returned", { data, signInError });
+      if (!sessionUser) {
+        setError("We couldn’t start your session. Please try again.");
+        setSubmitting(false);
+        return;
+      }
 
-if (signInError) {
-  setError(signInError.message || "Something went wrong signing you in.");
-  setSubmitting(false);
-  return;
-}
+      const { staffRow, error: staffError } = await getStaffRow(sessionUser.id);
 
-const sessionUser = data.session?.user ?? null;
-console.log("STEP 4: session user", sessionUser);
+      if (staffError) {
+        console.error("Staff lookup failed:", staffError);
+        await supabaseBrowser.auth.signOut().catch(() => {});
+        setError("Staff access check failed. Please try again.");
+        setSubmitting(false);
+        return;
+      }
 
-if (!sessionUser) {
-  setError("We couldn’t start your session. Please try again.");
-  setSubmitting(false);
-  return;
-}
+      if (!staffRow) {
+        await supabaseBrowser.auth.signOut().catch(() => {});
+        setError("This account does not have staff access.");
+        setSubmitting(false);
+        return;
+      }
 
-router.replace("/");
-return;
+      if (staffRow.is_active === false) {
+        await supabaseBrowser.auth.signOut().catch(() => {});
+        setError("This staff account is inactive.");
+        setSubmitting(false);
+        return;
+      }
 
+      if (!isAllowedStaffStatus(staffRow.status)) {
+        await supabaseBrowser.auth.signOut().catch(() => {});
+        setError("This staff account is not approved yet.");
+        setSubmitting(false);
+        return;
+      }
 
-// TEMPORARILY DISABLED FOR TEST
-// const { data: staffRow, error: staffErr } = await supabaseBrowser
-//   .from("staff")
-//   .select("id, auth_user_id, role, is_active, status, first_name")
-//   .eq("auth_user_id", sessionUser.id)
-//   .maybeSingle();
-//
-// console.log("STEP 5: staff query finished", { staffRow, staffErr });
-//
-// if (
-//   staffErr ||
-//   !staffRow ||
-//   staffRow.is_active === false ||
-//   !isAllowedStaffStatus(staffRow.status)
-// ) {
-//   console.log("STEP 6: staff denied");
-//   await supabaseBrowser.auth.signOut().catch(() => {});
-//   setError("This account does not have staff access.");
-//   setSubmitting(false);
-//   return;
-// }
-//
-// console.log("STEP 7: redirecting");
-// router.replace("/");
-    } catch (err: any) {
+      if (!isAllowedStaffRole(staffRow.role)) {
+        await supabaseBrowser.auth.signOut().catch(() => {});
+        setError("This staff role does not have portal access.");
+        setSubmitting(false);
+        return;
+      }
+
+      router.replace("/");
+      router.refresh();
+    } catch (err) {
       console.error("LOGIN CRASH:", err);
       setError("Login was interrupted. Please try again.");
       setSubmitting(false);
@@ -180,18 +234,18 @@ return;
           </button>
         </form>
 
-  <p className="mt-4 text-center text-xs text-[#718096]">
-  Staff access is private.
-  <br />
-  If you’ve already been hired,{" "}
-  <button
-    type="button"
-    onClick={() => router.push("/create-access")}
-    className="text-[#5B7CFA] underline hover:text-[#3F5FE0]"
-  >
-    create your access here.
-  </button>
-</p>
+        <p className="mt-4 text-center text-xs text-[#718096]">
+          Staff access is private.
+          <br />
+          If you’ve already been hired,{" "}
+          <button
+            type="button"
+            onClick={() => router.push("/apply")}
+            className="text-[#5B7CFA] underline hover:text-[#3F5FE0]"
+          >
+            create your access here.
+          </button>
+        </p>
       </Panel>
     </PageShell>
   );

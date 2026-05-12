@@ -13,6 +13,7 @@ const row1: NavItem[] = [
   { href: "/onboarding", label: "Onboarding" },
   { href: "/photo-review", label: "Photo Review" },
   { href: "/library-review", label: "Library Review" },
+   { href: "/session-talks", label: "Session Talks" },
   { href: "/jobs", label: "Jobs" },
   { href: "/safety/blocks", label: "User Blocked" },
   { href: "/henry", label: "Henry Desk" },
