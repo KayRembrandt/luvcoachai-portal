@@ -53,7 +53,7 @@ async function getStaffRow(authUserId: string) {
   const { data, error } = await supabaseBrowser
     .from("staff")
     .select(STAFF_SELECT)
-    .eq("auth_user_id", authUserId)
+    .or(`auth_user_id.eq.${authUserId},id.eq.${authUserId}`)
     .maybeSingle();
 
   return { staffRow: (data as StaffRow | null) ?? null, error };

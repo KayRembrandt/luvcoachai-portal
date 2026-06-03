@@ -1,0 +1,472 @@
+.pageShell {
+  width: min(100% - 32px, 1320px);
+  margin: 0 auto;
+  padding: 24px 0 48px;
+}
+
+.heroCard,
+.panel,
+.statCard,
+.noticeBox,
+.errorBox {
+  border: 1px solid #dbe4f0;
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(15, 27, 51, 0.05);
+}
+
+.heroCard {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  border-radius: 24px;
+  padding: 24px;
+}
+
+.heroCard h1 {
+  margin: 4px 0 6px;
+  color: #0f1b33;
+  font-size: clamp(1.6rem, 2vw, 2.2rem);
+  line-height: 1.1;
+  font-weight: 750;
+}
+
+.heroCard p {
+  margin: 0;
+  max-width: 680px;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.eyebrow {
+  color: #2563eb !important;
+  font-size: 0.76rem !important;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.heroActions,
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.primaryButton,
+.secondaryButton,
+.primaryButtonWide {
+  min-height: 38px;
+  border-radius: 999px;
+  padding: 0 15px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  transition: 140ms ease;
+}
+
+.primaryButton,
+.primaryButtonWide {
+  border: 1px solid #0f172a;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.primaryButtonWide {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.secondaryButton {
+  border: 1px solid #d4ddec;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.primaryButton:hover,
+.primaryButtonWide:hover,
+.secondaryButton:hover {
+  transform: translateY(-1px);
+}
+
+.primaryButton:disabled,
+.primaryButtonWide:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.noticeBox,
+.errorBox {
+  margin-top: 14px;
+  border-radius: 18px;
+  padding: 14px 16px;
+  font-size: 0.9rem;
+}
+
+.noticeBox {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.errorBox {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 16px 0;
+}
+
+.statCard {
+  border-radius: 20px;
+  padding: 16px;
+}
+
+.statCard span {
+  display: block;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.statCard strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f172a;
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(380px, 0.65fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.panel {
+  overflow: hidden;
+  border-radius: 24px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e7edf6;
+  padding: 18px 20px;
+}
+
+.panelHeader h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+
+.panelHeader p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 0.84rem;
+}
+
+.teamList {
+  display: grid;
+  max-height: 66vh;
+  overflow: auto;
+  padding: 14px;
+  gap: 12px;
+}
+
+.memberCard {
+  border: 1px solid #dbe4f0;
+  border-radius: 20px;
+  background: #fbfdff;
+  padding: 14px;
+}
+
+.selectedCard {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.memberHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.memberNameButton {
+  display: grid;
+  gap: 2px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.memberName {
+  color: #0f172a;
+  font-size: 0.98rem;
+  font-weight: 750;
+}
+
+.memberMeta {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.onDutyBadge,
+.offDutyBadge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.onDutyBadge {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.offDutyBadge {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.field span,
+.checkRow span {
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.field input,
+.field select,
+.field textarea,
+.scheduleRow input[type="time"] {
+  width: 100%;
+  border: 1px solid #dbe4f0;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.88rem;
+  outline: none;
+  padding: 10px 12px;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.scheduleRow input[type="time"]:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  margin-top: 20px;
+}
+
+.smsNote,
+.helpText {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.sideColumn {
+  display: grid;
+  gap: 18px;
+}
+
+.scheduleList {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.scheduleRow {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 112px 22px 112px;
+  align-items: center;
+  gap: 8px;
+}
+
+.dayToggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #0f172a;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.toText {
+  color: #64748b;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.helpText {
+  padding: 0 16px 16px;
+}
+
+.logList {
+  display: grid;
+  max-height: 360px;
+  overflow: auto;
+  padding: 12px;
+  gap: 10px;
+}
+
+.logRow {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fbfdff;
+  padding: 12px;
+}
+
+.logRow div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.logRow strong {
+  color: #0f172a;
+  font-size: 0.84rem;
+  text-transform: capitalize;
+}
+
+.logRow span,
+.logRow small {
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+.logRow p {
+  margin: 6px 0 3px;
+  color: #334155;
+  font-size: 0.84rem;
+}
+
+.logRow em {
+  display: block;
+  margin-top: 6px;
+  color: #991b1b;
+  font-size: 0.78rem;
+  font-style: normal;
+}
+
+.emptyState {
+  border: 1px dashed #cbd5e1;
+  border-radius: 18px;
+  background: #f8fafc;
+  color: #64748b;
+  padding: 18px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 1180px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .teamList {
+    max-height: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .pageShell {
+    width: min(100% - 20px, 1320px);
+    padding-top: 14px;
+  }
+
+  .heroCard,
+  .panelHeader {
+    display: grid;
+  }
+
+  .heroActions,
+  .cardActions {
+    justify-content: stretch;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    width: 100%;
+  }
+
+  .statsGrid,
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .scheduleRow {
+    grid-template-columns: 1fr;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 10px;
+  }
+
+  .toText {
+    display: none;
+  }
+}
+
+.fieldHint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.fieldHint button {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

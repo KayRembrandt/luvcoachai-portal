@@ -21,7 +21,9 @@ const row1: NavItem[] = [
 ];
 
 const row2AdminOnly: NavItem[] = [
+  { href: "/staff-applications", label: "Staff Application" },
   { href: "/staff", label: "Staff List" },
+  { href: "/admin/photo-review/team", label: "Photo Review Team" },
   { href: "/safety", label: "Safety" },
   { href: "/system", label: "System" },
   { href: "/admin/profiles-db", label: "Profiles DB" },
