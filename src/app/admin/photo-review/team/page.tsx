@@ -420,17 +420,22 @@ export default function AdminPhotoReviewTeamPage() {
     setNotice(null);
 
     try {
-      const json = await apiFetch("/api/admin/photo-review/notify", {
+      const json = await apiFetch("/api/admin/photo-review/replay-edge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "queue", force: true }),
+        body: JSON.stringify({ backfill_missing: true, limit: 50 }),
       });
 
-      const sent = Array.isArray(json.recipients)
-        ? json.recipients.filter((row: any) => row.status === "sent").length
-        : 0;
+      const summary = json.summary ?? {};
+      const sent = Number(summary.sent ?? 0);
+      const skipped = Number(summary.skipped ?? 0);
+      const failed = Number(summary.failed ?? 0);
+      const inserted = Number(summary.inserted_notification_count ?? 0);
+      const attempted = Number(summary.edge_invocations_attempted ?? 0);
 
-      setNotice(`Photo-review email sent to ${sent} reviewer${sent === 1 ? "" : "s"}.`);
+      setNotice(
+        `Photo-review Edge email replay: ${sent} sent, ${skipped} skipped, ${failed} failed. ${attempted} Edge invocation${attempted === 1 ? "" : "s"} attempted. ${inserted} missing notification row${inserted === 1 ? "" : "s"} backfilled.`
+      );
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send notification.");
@@ -528,7 +533,7 @@ export default function AdminPhotoReviewTeamPage() {
             {busy === "sync" ? "Syncing…" : "Sync active staff"}
           </button>
           <button type="button" className={styles.primaryButton} onClick={notifyOnDuty} disabled={busy === "notify"}>
-            {busy === "notify" ? "Sending…" : "Notify on-duty staff"}
+            {busy === "notify" ? "Sending…" : "Replay pending emails"}
           </button>
         </div>
       </section>
@@ -636,7 +641,7 @@ export default function AdminPhotoReviewTeamPage() {
             </button>
 
             <p className={styles.helpText}>
-              Schedule rows decide who receives queue email when “Notify on-duty staff” is used. Times are read in the staff member’s saved timezone. If nobody is on duty, the route falls back to approved admins for V1.
+              Schedule rows decide who receives automatic queue email. The replay button backfills missed notification rows, then asks the Edge Function to send any pending emails. If nobody is on duty, the Edge Function uses PHOTO_REVIEW_FALLBACK_EMAILS.
             </p>
           </section>
 

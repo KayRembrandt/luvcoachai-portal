@@ -18,13 +18,43 @@ function getServiceSupabase() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       auth: { persistSession: false },
-    }
+    },
   );
 }
 
 function isAllowedStaffStatus(status: unknown) {
   const s = String(status ?? "").toLowerCase();
   return s === "active" || s === "approved";
+}
+
+async function tryResolvePhotoReviewNotification(
+  svc: ReturnType<typeof getServiceSupabase>,
+  input: {
+    photoId: string;
+    staffId: string;
+    reviewStatus: ReviewStatus;
+    resolvedAt: string;
+  },
+) {
+  const { error } = await svc
+    .from("photo_review_notifications")
+    .update({
+      status: "resolved",
+      resolved_at: input.resolvedAt,
+      resolved_by: input.staffId,
+      metadata: {
+        resolved_review_status: input.reviewStatus,
+        resolved_from: "api/photos/review",
+      },
+    })
+    .eq("photo_id", input.photoId)
+    .eq("status", "unread");
+
+  if (error) {
+    // The review itself should not fail just because the notification table
+    // or notification row is missing. Log it and keep the staff action successful.
+    console.warn("photos/review notification resolve skipped:", error.message);
+  }
 }
 
 async function createRouteSupabase() {
@@ -50,7 +80,7 @@ async function createRouteSupabase() {
           }
         },
       },
-    }
+    },
   );
 
   const withCookies = (res: NextResponse) => {
@@ -74,7 +104,10 @@ export async function POST(req: Request) {
       await supabase.auth.getUser();
 
     if (cookieUserErr) {
-      console.error("photos/review auth.getUser error (cookie):", cookieUserErr);
+      console.error(
+        "photos/review auth.getUser error (cookie):",
+        cookieUserErr,
+      );
     }
 
     user = cookieUserRes?.user ?? null;
@@ -93,7 +126,7 @@ export async function POST(req: Request) {
         if (bearerUserErr) {
           console.error(
             "photos/review auth.getUser error (bearer):",
-            bearerUserErr
+            bearerUserErr,
           );
         }
 
@@ -111,8 +144,8 @@ export async function POST(req: Request) {
               cookie_names: cookieStore.getAll().map((c) => c.name),
             },
           },
-          { status: 401 }
-        )
+          { status: 401 },
+        ),
       );
     }
 
@@ -127,7 +160,7 @@ export async function POST(req: Request) {
     if (staffErr) {
       console.error("photos/review staff lookup error:", staffErr);
       return withCookies(
-        NextResponse.json({ error: staffErr.message }, { status: 500 })
+        NextResponse.json({ error: staffErr.message }, { status: 500 }),
       );
     }
 
@@ -163,8 +196,8 @@ export async function POST(req: Request) {
               okStatus,
             },
           },
-          { status: 403 }
-        )
+          { status: 403 },
+        ),
       );
     }
 
@@ -180,14 +213,14 @@ export async function POST(req: Request) {
       return withCookies(
         NextResponse.json(
           { error: "Missing photo_id or status" },
-          { status: 400 }
-        )
+          { status: 400 },
+        ),
       );
     }
 
     if (!["approved", "needs_attention", "rejected"].includes(status)) {
       return withCookies(
-        NextResponse.json({ error: "Invalid status" }, { status: 400 })
+        NextResponse.json({ error: "Invalid status" }, { status: 400 }),
       );
     }
 
@@ -216,9 +249,16 @@ export async function POST(req: Request) {
     if (updErr) {
       console.error("photos/review update error:", updErr);
       return withCookies(
-        NextResponse.json({ error: updErr.message }, { status: 500 })
+        NextResponse.json({ error: updErr.message }, { status: 500 }),
       );
     }
+
+    await tryResolvePhotoReviewNotification(svc, {
+      photoId: photo_id,
+      staffId: staff.id,
+      reviewStatus: status,
+      resolvedAt: now,
+    });
 
     return withCookies(
       NextResponse.json({
@@ -231,13 +271,13 @@ export async function POST(req: Request) {
           status,
           actor,
         },
-      })
+      }),
     );
   } catch (e: any) {
     console.error("photos/review fatal:", e);
     return NextResponse.json(
       { error: e?.message ?? "Server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

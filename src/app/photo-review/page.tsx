@@ -20,6 +20,11 @@ type PendingUserRow = {
   newest_pending_at: string;
 };
 
+type NotificationSummary = {
+  unreadCount: number;
+  newestAt: string | null;
+};
+
 function calcAge(dob: string | null) {
   if (!dob) return null;
   const d = new Date(dob);
@@ -44,11 +49,18 @@ export default function PhotoReviewPage() {
   const [rows, setRows] = React.useState<PendingUserRow[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [statusFilter, setStatusFilter] = React.useState<QueueFilter>("pending");
+  const [statusFilter, setStatusFilter] =
+    React.useState<QueueFilter>("pending");
+  const [notificationSummary, setNotificationSummary] =
+    React.useState<NotificationSummary | null>(null);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
+  async function load(options: { silent?: boolean } = {}) {
+    const silent = options.silent === true;
+
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
       const {
@@ -60,7 +72,6 @@ export default function PhotoReviewPage() {
         console.error("PhotoReviewPage getSession error:", sessionError);
         setError(sessionError.message || "Could not verify your session.");
         setRows([]);
-        setLoading(false);
         return;
       }
 
@@ -70,7 +81,6 @@ export default function PhotoReviewPage() {
         console.error("PhotoReviewPage: no access token found.");
         setError("Not logged in.");
         setRows([]);
-        setLoading(false);
         return;
       }
 
@@ -88,41 +98,75 @@ export default function PhotoReviewPage() {
             Authorization: `Bearer ${token}`,
           },
           cache: "no-store",
-        }
+        },
       );
 
       const json = await res.json().catch(() => ({}));
 
       console.log("PhotoReviewPage pending-users response:", res.status, json);
-if (!res.ok) {
-  setError(json?.error ?? `Failed to load (${res.status})`);
-  setRows(json?.rows ?? json?.users ?? []);
-  setLoading(false);
-  return;
-}
 
-const nextRows = json?.rows ?? json?.users ?? [];
+      if (!res.ok) {
+        setError(json?.error ?? `Failed to load (${res.status})`);
+        setRows(json?.rows ?? json?.users ?? []);
+        return;
+      }
 
-setRows(json?.rows ?? json?.users ?? []);
-setLoading(false);
+      setRows(json?.rows ?? json?.users ?? []);
+      setError(null);
 
+      const {
+        count,
+        data: notificationRows,
+        error: notificationError,
+      } = await supabaseBrowser
+        .from("photo_review_notifications")
+        .select("id, created_at", { count: "exact" })
+        .eq("status", "unread")
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (notificationError) {
+        // Do not break the queue if the notification table or RLS policy is not deployed yet.
+        console.warn(
+          "PhotoReviewPage notification summary skipped:",
+          notificationError.message,
+        );
+        setNotificationSummary(null);
+      } else {
+        setNotificationSummary({
+          unreadCount: count ?? notificationRows?.length ?? 0,
+          newestAt: notificationRows?.[0]?.created_at ?? null,
+        });
+      }
     } catch (err: any) {
       console.error("PhotoReviewPage load failed:", err);
 
       if (
         err?.name === "AbortError" ||
-        String(err?.message ?? "").toLowerCase().includes("aborted")
+        String(err?.message ?? "")
+          .toLowerCase()
+          .includes("aborted")
       ) {
-        setLoading(false);
         return;
       }
 
       setError(err?.message ?? "Something went wrong while loading.");
+    } finally {
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }
 
   React.useEffect(() => {
     load();
+
+    // This gives staff an in-portal notification even if they leave the queue open.
+    const intervalId = window.setInterval(() => {
+      load({ silent: true });
+    }, 30_000);
+
+    return () => window.clearInterval(intervalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
@@ -133,11 +177,15 @@ setLoading(false);
     return row.pending_count + row.needs_attention_count + row.rejected_count;
   }
 
+  const unreadNotificationCount = notificationSummary?.unreadCount ?? 0;
+
   return (
     <div className="p-6">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-[#0F1B33]">Photo Review</h1>
+          <h1 className="text-2xl font-semibold text-[#0F1B33]">
+            Photo Review
+          </h1>
           <p className="mt-1 text-sm text-gray-600">
             Queue of users with photos awaiting review • {rows.length} users
           </p>
@@ -145,13 +193,27 @@ setLoading(false);
 
         <button
           type="button"
-          onClick={load}
+          onClick={() => load()}
           disabled={loading}
           className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? "Loading…" : "Refresh"}
         </button>
       </div>
+
+      {unreadNotificationCount > 0 && (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="font-semibold">🔔 Photo review alert</div>
+          <div className="mt-1">
+            {unreadNotificationCount} uploaded{" "}
+            {unreadNotificationCount === 1 ? "photo needs" : "photos need"}{" "}
+            staff review
+            {notificationSummary?.newestAt
+              ? ` • Latest upload ${new Date(notificationSummary.newestAt).toLocaleString()}`
+              : ""}
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -218,7 +280,9 @@ setLoading(false);
                 className="grid w-full grid-cols-12 gap-2 border-b px-4 py-3 text-left hover:bg-gray-50"
               >
                 <div className="col-span-4">
-                  <div className="text-sm font-medium text-gray-900">{name}</div>
+                  <div className="text-sm font-medium text-gray-900">
+                    {name}
+                  </div>
                   <div className="text-xs text-gray-500">{row.user_id}</div>
                 </div>
 

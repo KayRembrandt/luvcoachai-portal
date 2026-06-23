@@ -70,7 +70,7 @@ export function getSupabaseAdmin(): SupabaseClient {
         persistSession: false,
         autoRefreshToken: false,
       },
-    }
+    },
   );
 }
 
@@ -88,7 +88,7 @@ function getAuthClient(token: string): SupabaseClient {
           Authorization: `Bearer ${token}`,
         },
       },
-    }
+    },
   );
 }
 
@@ -99,12 +99,18 @@ export function pickBearerToken(req: NextRequest) {
 }
 
 export function isAllowedStaffStatus(status: unknown) {
-  const s = String(status ?? "").toLowerCase().trim();
+  const s = String(status ?? "")
+    .toLowerCase()
+    .trim();
   return s === "" || s === "active" || s === "approved";
 }
 
 export function isAdminRole(role: unknown) {
-  return String(role ?? "").toLowerCase().trim() === "admin";
+  return (
+    String(role ?? "")
+      .toLowerCase()
+      .trim() === "admin"
+  );
 }
 
 export async function requireAdmin(req: NextRequest): Promise<VerifiedAdmin> {
@@ -165,7 +171,7 @@ export function routeError(error: unknown) {
   const status = typeof err?.status === "number" ? err.status : 500;
   return Response.json(
     { error: err?.message ?? "Something went wrong." },
-    { status }
+    { status },
   );
 }
 
@@ -191,12 +197,12 @@ export function getStaffAuthUserId(staff: StaffRow | null | undefined) {
 
 export async function loadAuthEmailMap(
   supabase: SupabaseClient,
-  staffRows: StaffRow[]
+  staffRows: StaffRow[],
 ) {
   const authUserIds = new Set(
     staffRows
       .map((staff) => getStaffAuthUserId(staff))
-      .filter((value): value is string => !!value)
+      .filter((value): value is string => !!value),
   );
 
   const emailByAuthUserId = new Map<string, string>();
@@ -215,7 +221,10 @@ export async function loadAuthEmailMap(
       });
 
       if (error) {
-        console.warn("Photo review admin could not list auth users:", error.message);
+        console.warn(
+          "Photo review admin could not list auth users:",
+          error.message,
+        );
         break;
       }
 
@@ -227,7 +236,10 @@ export async function loadAuthEmailMap(
         }
       }
 
-      if (emailByAuthUserId.size >= authUserIds.size || users.length < perPage) {
+      if (
+        emailByAuthUserId.size >= authUserIds.size ||
+        users.length < perPage
+      ) {
         break;
       }
     }
@@ -240,7 +252,7 @@ export async function loadAuthEmailMap(
 
 export function pickStaffEmail(
   staff: StaffRow | null | undefined,
-  authEmailByUserId?: Map<string, string>
+  authEmailByUserId?: Map<string, string>,
 ) {
   const candidates = [
     staff?.notification_email,
@@ -255,7 +267,9 @@ export function pickStaffEmail(
   }
 
   const authUserId = getStaffAuthUserId(staff);
-  const authEmail = authUserId ? cleanEmail(authEmailByUserId?.get(authUserId)) : null;
+  const authEmail = authUserId
+    ? cleanEmail(authEmailByUserId?.get(authUserId))
+    : null;
 
   return authEmail;
 }
@@ -316,8 +330,11 @@ export function timeToMinutes(value: string) {
 }
 
 export function isCoverageOnNow(
-  coverage: Pick<PhotoReviewCoverageRow, "day_of_week" | "start_time" | "end_time" | "timezone" | "is_active">,
-  now = new Date()
+  coverage: Pick<
+    PhotoReviewCoverageRow,
+    "day_of_week" | "start_time" | "end_time" | "timezone" | "is_active"
+  >,
+  now = new Date(),
 ) {
   if (coverage.is_active === false) return false;
 
@@ -336,4 +353,160 @@ export function isCoverageOnNow(
 
   // Overnight shift: 22:00-06:00
   return minutes >= start || minutes < end;
+}
+
+export type PhotoReviewNotificationStatus = "unread" | "resolved" | "dismissed";
+
+export type PhotoReviewNotificationRow = {
+  id: string;
+  photo_id: string;
+  user_id: string;
+  type: "photo_review_required" | string;
+  title: string;
+  message: string;
+  status: PhotoReviewNotificationStatus | string;
+  created_at?: string | null;
+  resolved_at?: string | null;
+  resolved_by?: string | null;
+  metadata?: Record<string, unknown> | null;
+  [key: string]: unknown;
+};
+
+export type CreatePhotoReviewNotificationInput = {
+  photoId: string;
+  userId: string;
+  uploadType?: unknown;
+  source?: string;
+  message?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export function normalizePhotoUploadType(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_");
+}
+
+export function isReviewablePhotoUploadType(value: unknown) {
+  const uploadType = normalizePhotoUploadType(value);
+
+  return (
+    uploadType === "identity_selfie" ||
+    uploadType === "profile_photo" ||
+    uploadType === "verification_photo" ||
+    uploadType === "photo"
+  );
+}
+
+export function photoReviewNotificationMessage(uploadType: unknown) {
+  const normalized = normalizePhotoUploadType(uploadType || "photo");
+  const label = normalized.replace(/_/g, " ");
+  return `A new ${label} needs staff review.`;
+}
+
+export async function createPhotoReviewNotification(
+  supabase: SupabaseClient,
+  input: CreatePhotoReviewNotificationInput,
+) {
+  const photoId = String(input.photoId ?? "").trim();
+  const userId = String(input.userId ?? "").trim();
+  const uploadType = normalizePhotoUploadType(
+    input.uploadType || "profile_photo",
+  );
+
+  if (!photoId) {
+    throw new Error("Missing photo id for photo review notification.");
+  }
+
+  if (!userId) {
+    throw new Error("Missing user id for photo review notification.");
+  }
+
+  if (!isReviewablePhotoUploadType(uploadType)) {
+    return {
+      ok: true,
+      created: false,
+      skipped: true,
+      reason: "upload type does not require photo review",
+    } as const;
+  }
+
+  const { data, error } = await supabase
+    .from("photo_review_notifications")
+    .insert({
+      photo_id: photoId,
+      user_id: userId,
+      type: "photo_review_required",
+      title: "Photo review needed",
+      message: input.message ?? photoReviewNotificationMessage(uploadType),
+      status: "unread",
+      metadata: {
+        ...(input.metadata ?? {}),
+        upload_type: uploadType,
+        source: input.source ?? "photo_upload",
+      },
+    })
+    .select("id")
+    .maybeSingle<{ id: string }>();
+
+  if (error) {
+    // Duplicate means this photo already has an unread review notification.
+    // Do not block the upload for that.
+    if (error.code === "23505") {
+      return {
+        ok: true,
+        created: false,
+        duplicate: true,
+      } as const;
+    }
+
+    throw error;
+  }
+
+  return {
+    ok: true,
+    created: true,
+    notificationId: data?.id ?? null,
+  } as const;
+}
+
+export async function resolvePhotoReviewNotification(
+  supabase: SupabaseClient,
+  input: {
+    photoId: string;
+    resolvedBy: string;
+    reviewStatus: string;
+    resolvedAt?: string;
+  },
+) {
+  const photoId = String(input.photoId ?? "").trim();
+  const resolvedBy = String(input.resolvedBy ?? "").trim();
+  const resolvedAt = input.resolvedAt ?? new Date().toISOString();
+
+  if (!photoId) {
+    throw new Error(
+      "Missing photo id for resolving photo review notification.",
+    );
+  }
+
+  const { error } = await supabase
+    .from("photo_review_notifications")
+    .update({
+      status: "resolved",
+      resolved_at: resolvedAt,
+      resolved_by: resolvedBy || null,
+      metadata: {
+        resolved_review_status: input.reviewStatus,
+        resolved_from: "photo_review_action",
+      },
+    })
+    .eq("photo_id", photoId)
+    .eq("status", "unread");
+
+  if (error) {
+    throw error;
+  }
+
+  return { ok: true } as const;
 }
