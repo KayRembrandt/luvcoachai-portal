@@ -155,7 +155,7 @@ function TeamMemberCard({
   selected: boolean;
   onSelect: () => void;
   onSaved: () => void;
-  onTestEmail: (teamId: string) => void;
+  onTestEmail: (staffId: string, teamId: string | null, email: string) => void;
 }) {
   const [applicationStatus, setApplicationStatus] = React.useState(
     member.team?.application_status ?? "approved"
@@ -220,7 +220,7 @@ function TeamMemberCard({
   }
 
   const configured = !!member.team;
-  const canTest = configured && !!email && emailEnabled;
+  const canTest = !!email.trim() && emailEnabled;
 
   return (
     <article className={[styles.memberCard, selected ? styles.selectedCard : ""].join(" ")}>
@@ -310,7 +310,7 @@ function TeamMemberCard({
         <button
           type="button"
           className={styles.secondaryButton}
-          onClick={() => member.team?.id && onTestEmail(member.team.id)}
+          onClick={() => onTestEmail(member.staff.id, member.team?.id ?? null, email)}
           disabled={!canTest}
         >
           Send test email
@@ -444,23 +444,25 @@ export default function AdminPhotoReviewTeamPage() {
     }
   }
 
-  async function sendTestEmail(teamId: string) {
-    setBusy(`test-${teamId}`);
+  async function sendTestEmail(staffId: string, teamId: string | null, email: string) {
+    const clean = email.trim();
+    if (!clean) {
+      setError("Enter an alert email before sending a test email.");
+      return;
+    }
+
+    setBusy(`test-${teamId ?? clean}`);
     setError(null);
     setNotice(null);
 
     try {
-      const json = await apiFetch("/api/admin/photo-review/notify", {
+      const json = await apiFetch("/api/admin/photo-review/test-edge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "test", team_id: teamId, force: true }),
+        body: JSON.stringify({ staff_id: staffId, team_id: teamId, recipient_email: clean }),
       });
 
-      const sent = Array.isArray(json.recipients)
-        ? json.recipients.filter((row: any) => row.status === "sent").length
-        : 0;
-
-      setNotice(`Test email sent to ${sent} reviewer${sent === 1 ? "" : "s"}.`);
+      setNotice(`Test email sent to ${json.recipient_email ?? clean}.`);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send test email.");

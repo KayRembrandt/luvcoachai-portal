@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { signProfilePhotoRows } from "@/lib/photoUrlSigning";
 
 function getBearerToken(req: Request) {
   const h = req.headers.get("authorization") || "";
@@ -23,7 +24,7 @@ function getServiceSupabase() {
   );
 }
 
-function isAllowedStaffStatus(status: any) {
+function isAllowedStaffStatus(status: unknown) {
   const s = String(status ?? "active").toLowerCase();
   return s === "active" || s === "approved" || s === "";
 }
@@ -77,7 +78,7 @@ console.log("photos/pending staff row:", staff);
     // 3) Load pending photos
     const { data: rows, error } = await svc
       .from("profile_photos")
-      .select("id,user_id,storage_bucket,storage_path,review_status,staff_notes,admin_notes,created_at")
+      .select("id,user_id,storage_bucket,storage_path,review_status,staff_notes,admin_notes,created_at,photo_kind")
       .in("review_status", ["pending", "needs_attention"])
       .order("created_at", { ascending: true })
       .limit(100);
@@ -87,41 +88,20 @@ console.log("photos/pending staff row:", staff);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const photos = rows ?? [];
-
-    // 4) Signed URLs for private bucket (use row.storage_bucket)
-    const expiresIn = 60 * 10;
+    const photos = await signProfilePhotoRows(svc, rows ?? []);
     const signedMap: Record<string, string> = {};
 
-    // group paths by bucket
-    const byBucket = new Map<string, string[]>();
     for (const p of photos) {
-      if (!p.storage_bucket || !p.storage_path) continue;
-      const arr = byBucket.get(p.storage_bucket) ?? [];
-      arr.push(p.storage_path);
-      byBucket.set(p.storage_bucket, arr);
-    }
-console.log("SERVICE KEY LENGTH", process.env.SUPABASE_SERVICE_ROLE_KEY?.length);
-    for (const [bucket, paths] of byBucket.entries()) {
-      const { data: signed, error: signErr } = await svc.storage
-        .from(bucket)
-        .createSignedUrls(paths, expiresIn);
-
-      if (signErr) {
-        console.error("photos/pending createSignedUrls error:", signErr);
-        continue;
-      }
-
-      for (const item of signed ?? []) {
-        if (item?.path && item?.signedUrl) {
-          signedMap[item.path] = item.signedUrl;
-        }
+      if (p.storage_bucket && p.storage_path && p.displayUrl) {
+        signedMap[p.storage_path] = p.displayUrl;
+        signedMap[`${p.storage_bucket}:${p.storage_path}`] = p.displayUrl;
       }
     }
 
     return NextResponse.json({ photos, signedMap });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("photos/pending fatal:", e);
-    return NextResponse.json({ error: e?.message ?? "Server error" }, { status: 500 });
+    const message = e instanceof Error ? e.message : "Server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

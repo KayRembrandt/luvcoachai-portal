@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-type JsonObject = Record<string, unknown>;
+type Json = Record<string, any>;
 
-type SupabaseLooseClient = {
-  auth: {
-    getUser: (jwt?: string) => Promise<any>;
-  };
+type DbClient = {
   from: (table: string) => any;
-  rpc: (functionName: string, args?: Record<string, unknown>) => Promise<{ data: any; error: any }>;
+  rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
 };
 
 type PendingPhoto = {
@@ -37,40 +34,26 @@ type NotificationRow = {
   status?: string | null;
 };
 
-type AuthDenied = {
-  ok: false;
-  response: NextResponse;
-};
-
-type AuthAllowed = {
-  ok: true;
-  staff: any;
-  user: any;
-  svc: SupabaseLooseClient;
-};
-
-type AuthResult = AuthDenied | AuthAllowed;
-
 function requiredEnv(name: string) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
 }
 
-function getServiceSupabase(): SupabaseLooseClient {
+function getServiceDb(): DbClient {
   return createClient(
     requiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
     { auth: { persistSession: false, autoRefreshToken: false } },
-  ) as unknown as SupabaseLooseClient;
+  ) as unknown as DbClient;
 }
 
-function getAnonSupabase(): SupabaseLooseClient {
+function getAnonSupabase() {
   return createClient(
     requiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
     { auth: { persistSession: false, autoRefreshToken: false } },
-  ) as unknown as SupabaseLooseClient;
+  );
 }
 
 function photoLabel(photoKind: unknown) {
@@ -83,14 +66,8 @@ function photoLabel(photoKind: unknown) {
     return "identity selfie";
   }
 
-  if (["verification_photo", "verify_photo"].includes(kind)) {
-    return "verification photo";
-  }
-
-  if (["profile_photo", "profile", "photo"].includes(kind)) {
-    return "profile photo";
-  }
-
+  if (["verification_photo", "verify_photo"].includes(kind)) return "verification photo";
+  if (["profile_photo", "profile", "photo"].includes(kind)) return "profile photo";
   return kind.replaceAll("_", " ") || "photo";
 }
 
@@ -103,28 +80,27 @@ function normalizePhotoKind(photoKind: unknown) {
   );
 }
 
-async function requireAdminOrHenry(req: Request): Promise<AuthResult> {
+async function requireAdminOrHenry(req: Request, db: DbClient) {
   const token = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
   if (!token) {
-    return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+    return { ok: false as const, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
   const anon = getAnonSupabase();
   const { data: userRes, error: userError } = await anon.auth.getUser(token);
 
   if (userError || !userRes?.user?.id) {
-    return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+    return { ok: false as const, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
-  const svc = getServiceSupabase();
-  const { data: staff, error: staffError } = await svc
+  const { data: staff, error: staffError } = await db
     .from("staff")
     .select("id, auth_user_id, role, is_active, status, email")
     .eq("auth_user_id", userRes.user.id)
     .maybeSingle();
 
   if (staffError) {
-    return { ok: false, response: NextResponse.json({ error: staffError.message }, { status: 500 }) };
+    return { ok: false as const, response: NextResponse.json({ error: staffError.message }, { status: 500 }) };
   }
 
   const role = String(staff?.role ?? "").toLowerCase().trim();
@@ -133,7 +109,7 @@ async function requireAdminOrHenry(req: Request): Promise<AuthResult> {
 
   if (!staff || !active || !["active", "approved"].includes(status) || !["admin", "henry"].includes(role)) {
     return {
-      ok: false,
+      ok: false as const,
       response: NextResponse.json(
         { error: "Forbidden", debug: { role, status, active, staff_found: Boolean(staff) } },
         { status: 403 },
@@ -141,48 +117,48 @@ async function requireAdminOrHenry(req: Request): Promise<AuthResult> {
     };
   }
 
-  return { ok: true, staff, user: userRes.user, svc };
+  return { ok: true as const, staff, user: { id: userRes.user.id } };
 }
 
-async function getOnShiftReviewers(svc: SupabaseLooseClient) {
-  const { data, error } = await svc.rpc("get_on_shift_staff_photo_review_team");
-  if (error) throw error;
+async function getOnShiftReviewers(db: DbClient) {
+  const { data, error } = await db.rpc("get_on_shift_staff_photo_review_team");
+  if (error) throw new Error(error.message);
   return ((data ?? []) as OnShiftReviewer[]).filter((row) => row.email_enabled !== false);
 }
 
-async function fetchPendingPhotos(svc: SupabaseLooseClient) {
-  const { data, error } = await svc
+async function fetchPendingPhotos(db: DbClient) {
+  const { data, error } = await db
     .from("profile_photos")
     .select("id, user_id, photo_kind, review_status")
     .is("archived_at", null)
     .in("review_status", ["pending", "pending_review"])
     .order("created_at", { ascending: true });
 
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return (data ?? []) as PendingPhoto[];
 }
 
-async function fetchUnreadNotificationsForPhotos(svc: SupabaseLooseClient, photoIds: string[]) {
+async function fetchUnreadNotificationsForPhotos(db: DbClient, photoIds: string[]) {
   if (photoIds.length === 0) return [] as NotificationRow[];
 
-  const { data, error } = await svc
+  const { data, error } = await db
     .from("photo_review_notifications")
     .select("id, photo_id, staff_id, team_member_id, status, email_status")
     .eq("status", "unread")
     .in("photo_id", photoIds);
 
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return (data ?? []) as NotificationRow[];
 }
 
-async function backfillMissingNotifications(svc: SupabaseLooseClient) {
+async function backfillMissingNotifications(db: DbClient) {
   const [pendingPhotos, onShiftReviewers] = await Promise.all([
-    fetchPendingPhotos(svc),
-    getOnShiftReviewers(svc),
+    fetchPendingPhotos(db),
+    getOnShiftReviewers(db),
   ]);
 
   const existing = await fetchUnreadNotificationsForPhotos(
-    svc,
+    db,
     pendingPhotos.map((photo) => photo.id),
   );
 
@@ -193,7 +169,7 @@ async function backfillMissingNotifications(svc: SupabaseLooseClient) {
     return { inserted: [] as NotificationRow[], missing_photo_count: 0, on_shift_count: onShiftReviewers.length };
   }
 
-  const rowsToInsert: JsonObject[] = [];
+  const rowsToInsert: Json[] = [];
 
   for (const photo of missingPhotos) {
     const kind = normalizePhotoKind(photo.photo_kind);
@@ -253,13 +229,11 @@ async function backfillMissingNotifications(svc: SupabaseLooseClient) {
     }
   }
 
-  const { data, error } = await svc
+  const { data, error } = await db
     .from("photo_review_notifications")
     .insert(rowsToInsert)
     .select("id, photo_id, staff_id, team_member_id, status, email_status");
 
-  // Unique conflicts can happen if the database webhook/trigger creates rows at the same time.
-  // Return a soft result instead of breaking the admin action.
   if (error) {
     return {
       inserted: [] as NotificationRow[],
@@ -276,8 +250,8 @@ async function backfillMissingNotifications(svc: SupabaseLooseClient) {
   };
 }
 
-async function fetchPendingEmailNotifications(svc: SupabaseLooseClient, limit: number) {
-  const { data, error } = await svc
+async function fetchPendingEmailNotifications(db: DbClient, limit: number) {
+  const { data, error } = await db
     .from("photo_review_notifications")
     .select("id, photo_id, staff_id, team_member_id, status, email_status")
     .eq("status", "unread")
@@ -285,7 +259,7 @@ async function fetchPendingEmailNotifications(svc: SupabaseLooseClient, limit: n
     .order("created_at", { ascending: true })
     .limit(limit);
 
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return (data ?? []) as NotificationRow[];
 }
 
@@ -324,20 +298,19 @@ async function invokeEdgeNotification(notificationId: string) {
 
 export async function POST(req: Request) {
   try {
-    const auth = await requireAdminOrHenry(req);
+    const db = getServiceDb();
+    const auth = await requireAdminOrHenry(req, db);
     if (!auth.ok) return auth.response;
-
-    const svc = auth.svc;
 
     const body = await req.json().catch(() => ({}));
     const limit = Math.min(Math.max(Number(body.limit ?? 25), 1), 100);
     const shouldBackfill = body.backfill_missing !== false;
 
     const backfill = shouldBackfill
-      ? await backfillMissingNotifications(svc)
+      ? await backfillMissingNotifications(db)
       : { inserted: [] as NotificationRow[], missing_photo_count: 0, on_shift_count: 0 };
 
-    const pending = await fetchPendingEmailNotifications(svc, limit);
+    const pending = await fetchPendingEmailNotifications(db, limit);
 
     const results = [];
     for (const row of pending) {
@@ -360,7 +333,7 @@ export async function POST(req: Request) {
         sent,
         skipped,
         failed,
-        insert_error: "insert_error" in backfill ? backfill.insert_error : null,
+        insert_error: (backfill as any).insert_error ?? null,
       },
       backfill,
       results,

@@ -8,9 +8,18 @@ import { useRouter } from "next/navigation";
 export type PendingPhoto = {
   id: string;
   user_id: string;
-  signed_url?: string;
+  signed_url?: string | null;
+  displayUrl?: string | null;
+  imageUrl?: string | null;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
+  thumbPath?: string | null;
+  photoUrlError?: string | null;
   review_status: string;
   photo_kind?: string | null;
+  kind?: string | null;
+  staff_notes?: string | null;
+  admin_notes?: string | null;
 };
 
 export default function UserPendingPhotoCards({
@@ -87,10 +96,10 @@ export default function UserPendingPhotoCards({
 
       onChanged?.();
       router.refresh();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("UserPendingPhotoCards review failed:", err);
       setBusyId(null);
-      setError(err?.message ?? "Photo review failed.");
+      setError(err instanceof Error ? err.message : "Photo review failed.");
     }
   }
 

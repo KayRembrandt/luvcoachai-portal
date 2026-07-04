@@ -2,9 +2,10 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ConnectionProfileView } from "@/components/client-preview/ClientProfileView";
-import { createSupabaseServiceServerClient } from "@/lib/supabaseServiceServer";
 import UserPendingPhotoCards, { type PendingPhoto } from "@/components/photo-review/UserPendingPhotoCards";
 import { createSupabaseServiceClient } from "@/lib/supabaseService";
+import { signProfilePhotoRows } from "@/lib/photoUrlSigning";
+import ProfileImagePreview from "@/components/ProfileImagePreview";
 
 
 import { Panel } from "@/components/Panel";
@@ -121,17 +122,13 @@ function PhotosCard({ heroUrl }: { heroUrl: string | null }) {
       </div>
 
       <div className="aspect-square w-full overflow-hidden rounded-2xl bg-slate-100 border border-slate-200">
-        {heroUrl ? (
-          <img
-            src={heroUrl}
-            alt="Profile photo"
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-slate-400 text-sm">
-            No photo
-          </div>
-        )}
+        <ProfileImagePreview
+          src={heroUrl}
+          alt="Profile photo"
+          className="h-full w-full object-cover"
+          fallbackClassName="flex h-full w-full items-center justify-center text-slate-400 text-sm"
+          meta={{ surface: "user360_hero" }}
+        />
       </div>
     </div>
   );
@@ -384,6 +381,19 @@ export default async function User360Page({
 
 
 type ProfileRow = Record<string, any>;
+type UserPhotoRow = {
+  id: string;
+  user_id: string | null;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  is_primary: boolean | null;
+  sort_order: number | null;
+  review_status: string | null;
+  created_at: string | null;
+  photo_kind: string | null;
+  staff_notes: string | null;
+  admin_notes: string | null;
+};
 
 console.log("USER360 USING SERVICE CLIENT");
 console.log("USER360 env", {
@@ -422,30 +432,36 @@ const p = profile as ProfileRow;
 // ✅ 1) Fetch ALL photos for this user (approved + pending + etc.)
 const { data: photoRows, error: photosError } = await supabase
   .from("profile_photos")
-  .select("id, storage_bucket, storage_path, is_primary, sort_order, review_status, created_at, photo_kind")
+  .select("id, user_id, storage_bucket, storage_path, is_primary, sort_order, review_status, created_at, photo_kind, staff_notes, admin_notes")
   .eq("user_id", id)
   .order("created_at", { ascending: false });
 
+const basePhotoRows = (photoRows ?? []) as UserPhotoRow[];
+
 if (photosError) console.log("USER360 photos error", photosError);
-console.log("USER360 photos rows", photoRows ?? []);
-console.log("USER360 rejected count", (photoRows ?? []).filter((r: any) => r.review_status === "rejected").length);
+console.log("USER360 photos rows", basePhotoRows);
+console.log("USER360 rejected count", basePhotoRows.filter((r) => r.review_status === "rejected").length);
 
 // ✅ 2) Build signed URLs for ALL rows (must happen before approvedUrls/pending cards)
-const signedMap = await buildSignedMap(photoRows ?? []);
+const signedPhotoRows = await signProfilePhotoRows(supabase, basePhotoRows);
+const signedMap: Record<string, string> = {};
+for (const row of signedPhotoRows) {
+  if (row.storage_path && row.displayUrl) signedMap[row.storage_path] = row.displayUrl;
+}
 console.log("USER360 signedMap size", Object.keys(signedMap).length);
-console.log("USER360 first paths", (photoRows ?? []).slice(0, 3).map((r: any) => r.storage_path));
+console.log("USER360 first paths", signedPhotoRows.slice(0, 3).map((r) => r.storage_path));
 // ✅ 3) Split rows by review status
-const approvedRows = (photoRows ?? []).filter(
-  (r: any) => r.review_status === "approved"
+const approvedRows = signedPhotoRows.filter(
+  (r) => r.review_status === "approved"
 );
-const pendingRows = (photoRows ?? []).filter(
-  (r: any) => r.review_status === "pending"
+const pendingRows = signedPhotoRows.filter(
+  (r) => r.review_status === "pending"
 );
-const rejectedRows = (photoRows ?? []).filter(
-  (r: any) => r.review_status === "rejected"
+const rejectedRows = signedPhotoRows.filter(
+  (r) => r.review_status === "rejected"
 );
 // ✅ 4) Optional: stable ordering for approved
-approvedRows.sort((a: any, b: any) => {
+approvedRows.sort((a, b) => {
   if (!!a.is_primary !== !!b.is_primary) return a.is_primary ? -1 : 1;
   const ao = a.sort_order ?? 999999;
   const bo = b.sort_order ?? 999999;
@@ -455,70 +471,43 @@ approvedRows.sort((a: any, b: any) => {
 
 // ✅ 5) Approved URLs derived from signedMap + approved rows
 const approvedUrls = approvedRows
-  .map((r: any) => {
+  .map((r) => {
     if (!r?.storage_path) return null;
     return signedMap?.[r.storage_path] ?? null;
   })
   .filter((u): u is string => typeof u === "string" && u.length > 0);
+
+const approvedPhotoViews = approvedRows.map((r) => ({
+  id: r.id as string,
+  url: r.displayUrl ?? null,
+  fullUrl: r.imageUrl ?? r.displayUrl ?? null,
+  storage_bucket: r.storage_bucket ?? null,
+  storage_path: r.storage_path ?? null,
+  thumbPath: r.thumbPath ?? null,
+  photoUrlError: r.photoUrlError ?? null,
+}));
   
 // 6) HERO photo for the left sidebar (approved only; prefer identity/selfie)
 const identityApproved = approvedRows.filter(
-  (r: any) =>
+  (r) =>
     typeof r.storage_path === "string" && r.storage_path.includes("/identity/")
 );
 
 const heroRow =
-  identityApproved.find((r: any) => r.is_primary) ??
+  identityApproved.find((r) => r.is_primary) ??
   identityApproved[0] ??
-  approvedRows.find((r: any) => r.is_primary) ??
+  approvedRows.find((r) => r.is_primary) ??
   approvedRows[0] ??
   null;
 
 const heroUrl =
   heroRow?.storage_path ? signedMap?.[heroRow.storage_path] ?? null : null;
 
-const needsRows = (photoRows ?? []).filter((r: any) => r.review_status === "needs_attention");
 console.log("USER360 heroUrl", heroUrl);
-// ✅ Build signed URLs for private storage (server-side)
-async function buildSignedMap(rows: any[], expiresInSeconds = 60 * 10) {
-  const signedMap: Record<string, string> = {};
-
-  // Group paths by bucket for batching
-  const byBucket = new Map<string, string[]>();
-  for (const r of rows) {
-    const bucket = typeof r?.storage_bucket === "string" ? r.storage_bucket : null;
-    const path = typeof r?.storage_path === "string" ? r.storage_path : null;
-    if (!bucket || !path) continue;
-
-    const list = byBucket.get(bucket) ?? [];
-    list.push(path);
-    byBucket.set(bucket, list);
-  }
-for (const [bucket, paths] of byBucket.entries()) {
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .createSignedUrls(paths, expiresInSeconds);
-
-  if (error) {
-    console.log("USER360 createSignedUrls error:", { bucket, error });
-    continue;
-  }
-
-  for (const item of data ?? []) {
-    if (item?.path && item?.signedUrl) {
-      // ✅ key by path only
-      signedMap[item.path] = item.signedUrl;
-    }
-  }
-}
-
-  return signedMap;
-}
-
 
 // ✅ 6) Pending cards include signed_url too (if you use them)
 const pendingCardPhotos = pendingRows
-  .map((r: any) => {
+  .map((r): PendingPhoto | null => {
     const bucket = typeof r?.storage_bucket === "string" ? r.storage_bucket : null;
     const path = typeof r?.storage_path === "string" ? r.storage_path : null;
     if (!bucket || !path) return null;
@@ -526,22 +515,22 @@ const pendingCardPhotos = pendingRows
  return {
   id: r.id as string,
   user_id: id,
-  signed_url: signedMap[path],
+  storage_bucket: bucket,
+  storage_path: path,
+  thumbPath: r.thumbPath ?? null,
+  signed_url: r.displayUrl ?? null,
+  displayUrl: r.displayUrl ?? null,
+  imageUrl: r.imageUrl ?? null,
+  photoUrlError: r.photoUrlError ?? null,
   review_status: String(r.review_status ?? "pending"),
+  photo_kind: r.photo_kind ?? null,
   kind: r.photo_kind ?? null,
 };
   })
-  
-  .filter(Boolean) as Array<{
-    id: string;
-    user_id: string;
-    signed_url?: string;
-    review_status: string;
-    photo_kind?: string | null;
-  }>;
+  .filter((photo): photo is PendingPhoto => photo !== null);
   
     const rejectedCardPhotos = rejectedRows
-  .map((r: any) => {
+  .map((r): PendingPhoto | null => {
     const bucket = typeof r?.storage_bucket === "string" ? r.storage_bucket : null;
     const path = typeof r?.storage_path === "string" ? r.storage_path : null;
     if (!path) return null;
@@ -549,13 +538,19 @@ const pendingCardPhotos = pendingRows
     return {
   id: r.id as string,
   user_id: id,
-  signed_url: signedMap[path] ?? null,
+  storage_bucket: bucket,
+  storage_path: path,
+  thumbPath: r.thumbPath ?? null,
+  signed_url: r.displayUrl ?? null,
+  displayUrl: r.displayUrl ?? null,
+  imageUrl: r.imageUrl ?? null,
+  photoUrlError: r.photoUrlError ?? null,
   review_status: "rejected",
   staff_notes: r.staff_notes ?? null,
   admin_notes: r.admin_notes ?? null,
 };
   })
-  .filter(Boolean) as PendingPhoto[];
+  .filter((photo): photo is PendingPhoto => photo !== null);
 
 
   console.log("USER360 rejectedCardPhotos length", rejectedCardPhotos.length);
@@ -752,7 +747,7 @@ console.log("USER360 rejectedCardPhotos sample", rejectedCardPhotos[0]);
   <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50">
     <div className="text-base font-semibold text-slate-900">Photos</div>
     <div className="text-sm text-slate-500">
-     {approvedUrls.length + pendingCardPhotos.length
+     {approvedRows.length + pendingCardPhotos.length
   ? `${approvedRows.length} approved • ${pendingCardPhotos.length} pending`
   : "No photos"}
     </div>
@@ -762,25 +757,33 @@ console.log("USER360 rejectedCardPhotos sample", rejectedCardPhotos[0]);
     {/* Approved */}
     <div>
       <div className="text-sm font-semibold text-slate-800 mb-3">Approved</div>
-      {approvedUrls.length === 0 ? (
+      {approvedPhotoViews.length === 0 ? (
         <div className="text-sm text-slate-500">No approved photos on file.</div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {approvedUrls.map((url, i) => (
+          {approvedPhotoViews.map((photo, i) => (
             <a
-              key={`ap-${url}-${i}`}
-              href={url}
+              key={`ap-${photo.id}-${i}`}
+              href={photo.fullUrl ?? photo.url ?? undefined}
               target="_blank"
               rel="noreferrer"
               className="group block rounded-2xl overflow-hidden border border-slate-200 bg-slate-50"
               title="Open full size"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
+              <ProfileImagePreview
+                src={photo.url}
+                fallbackSrc={photo.fullUrl}
                 alt={`Approved photo ${i + 1}`}
                 className="h-40 w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-                loading="lazy"
+                fallbackClassName="flex h-40 w-full items-center justify-center text-sm text-slate-500"
+                meta={{
+                  surface: "user360_approved_grid",
+                  photoId: photo.id,
+                  storageBucket: photo.storage_bucket,
+                  storagePath: photo.storage_path,
+                  thumbPath: photo.thumbPath,
+                  photoUrlError: photo.photoUrlError,
+                }}
               />
             </a>
           ))}

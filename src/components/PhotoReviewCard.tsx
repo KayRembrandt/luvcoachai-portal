@@ -6,11 +6,18 @@ type Props = {
   photo: {
     id: string;
     user_id: string;
-    signed_url?: string;
+    signed_url?: string | null;
+    displayUrl?: string | null;
+    imageUrl?: string | null;
+    storage_bucket?: string | null;
+    storage_path?: string | null;
+    thumbPath?: string | null;
+    photoUrlError?: string | null;
     review_status: string;
    staff_notes?: string | null;
    admin_notes?: string | null;
    photo_kind?: string | null
+   kind?: string | null;
   };
   busy?: boolean;
   onApprove: () => void;
@@ -29,8 +36,14 @@ export default function PhotoReviewCard({
     null
   );
   const [note, setNote] = React.useState("");
+  const [previewFailed, setPreviewFailed] = React.useState(false);
+  const [srcOverride, setSrcOverride] = React.useState<string | null>(null);
 
-  const src = photo.signed_url ?? "";
+  const primarySrc = photo.displayUrl ?? photo.signed_url ?? "";
+  const fallbackSrc =
+    photo.imageUrl && photo.imageUrl !== primarySrc ? photo.imageUrl : null;
+  const src = srcOverride ?? primarySrc;
+  const canApprove = !!src && !previewFailed;
   const status = photo.review_status ?? "pending";  
   function closeNote() {
     setNoteMode(null);
@@ -53,16 +66,32 @@ export default function PhotoReviewCard({
       <div className="w-full">
         <div className="mx-auto w-full max-w-[420px] overflow-hidden rounded-xl bg-gray-100">
           <div className="relative w-full">
-            {src ? (
+            {src && !previewFailed ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={src}
                 alt="Pending photo"
                 className="block w-full h-auto object-contain max-h-[420px]"
+                onError={() => {
+                  console.error("Profile photo failed to render", {
+                    photoId: photo.id,
+                    userId: photo.user_id,
+                    storageBucket: photo.storage_bucket,
+                    storagePath: photo.storage_path,
+                    thumbPath: photo.thumbPath,
+                    displayUrl: src,
+                    photoUrlError: photo.photoUrlError,
+                  });
+                  if (fallbackSrc && src !== fallbackSrc) {
+                    setSrcOverride(fallbackSrc);
+                    return;
+                  }
+                  setPreviewFailed(true);
+                }}
               />
             ) : (
               <div className="flex h-[220px] w-full items-center justify-center text-sm text-gray-500">
-                No preview
+                Preview unavailable
               </div>
             )}
           </div>
@@ -87,7 +116,7 @@ export default function PhotoReviewCard({
 
 <div className="text-base text-slate-700 font-semibold inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold border">
   
-  kind: {String((photo as any).kind)}
+  kind: {String(photo.photo_kind ?? photo.kind ?? "")}
 </div>
     {/* Status label + badge in the open space */}
     <div className="mt-3">
@@ -118,9 +147,10 @@ export default function PhotoReviewCard({
 </div>
           <div className="flex shrink-0 flex-col gap-2">
             <button
-              disabled={!!busy}
+              disabled={!!busy || !canApprove}
               onClick={onApprove}
-              className="px-4 py-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition disabled:opacity-60"
+              title={canApprove ? "Approve photo" : "Preview unavailable"}
+              className="px-4 py-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition disabled:cursor-not-allowed disabled:opacity-60"
             >
               ✅ Approve
             </button>

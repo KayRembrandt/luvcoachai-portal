@@ -10,6 +10,11 @@ type PhotoRow = {
   user_id: string;
   storage_bucket: string | null;
   storage_path: string | null;
+  thumbPath?: string | null;
+  signed_url?: string | null;
+  displayUrl?: string | null;
+  imageUrl?: string | null;
+  photoUrlError?: string | null;
   review_status: string | null;
   review_notes: string | null;
   created_at: string;
@@ -29,62 +34,6 @@ export default function PhotoReviewPage() {
   "pending" | "needs_attention" | "rejected" | "all"
 >("pending");
 const [actorMode, setActorMode] = React.useState<"staff" | "admin">("staff");
-
-async function loadSignedUrls(items: PhotoRow[]) {
-  const photoItems = items
-    .filter((row) => row.storage_bucket && row.storage_path)
-    .map((row) => ({
-      bucket: row.storage_bucket as string,
-      path: row.storage_path as string,
-    }));
-
-  if (photoItems.length === 0) {
-    setSignedMap({});
-    return;
-  }
-
-  try {
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabaseBrowser.auth.getSession();
-
-    if (sessionError) {
-      console.error("loadSignedUrls getSession error:", sessionError);
-      setSignedMap({});
-      return;
-    }
-
-    const token = session?.access_token ?? null;
-    if (!token) {
-      setSignedMap({});
-      return;
-    }
-
-    const res = await fetch("/api/photos/signed", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ items: photoItems }),
-      cache: "no-store",
-    });
-
-    const json = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      console.error("Signed URL fetch failed:", res.status, json);
-      setSignedMap({});
-      return;
-    }
-
-    setSignedMap(json?.signedMap ?? json?.map ?? {});
-  } catch (err) {
-    console.error("loadSignedUrls failed:", err);
-    setSignedMap({});
-  }
-}
 
   async function load() {
   setLoading(true);
@@ -121,7 +70,7 @@ async function loadSignedUrls(items: PhotoRow[]) {
     });
 
     const res = await fetch(
-      `/api/photos/pending-users?status=${encodeURIComponent(statusFilter)}`,
+      "/api/photos/pending",
       {
         method: "GET",
         headers: {
@@ -133,29 +82,32 @@ async function loadSignedUrls(items: PhotoRow[]) {
 
     const json = await res.json().catch(() => ({}));
 
-    console.log("PhotoReviewPage pending-users response:", res.status, json);
+    console.log("PhotoReviewPage pending photos response:", res.status, json);
 
     if (!res.ok) {
       setError(json?.error ?? `Failed to load (${res.status})`);
-      setRows(json?.rows ?? json?.users ?? []);
+      setRows(json?.photos ?? []);
+      setSignedMap(json?.signedMap ?? {});
       setLoading(false);
       return;
     }
 
-    setRows(json?.rows ?? json?.users ?? []);
+    setRows(json?.photos ?? []);
+    setSignedMap(json?.signedMap ?? {});
     setLoading(false);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("PhotoReviewPage load failed:", err);
+    const message = err instanceof Error ? err.message : "Something went wrong while loading.";
 
     if (
-      err?.name === "AbortError" ||
-      String(err?.message ?? "").toLowerCase().includes("aborted")
+      (err instanceof Error && err.name === "AbortError") ||
+      message.toLowerCase().includes("aborted")
     ) {
       setLoading(false);
       return;
     }
 
-    setError(err?.message ?? "Something went wrong while loading.");
+    setError(message);
     setRows([]);
     setLoading(false);
   }
@@ -180,7 +132,7 @@ async function review(
 
   const now = new Date().toISOString();
 
-  const payload: Record<string, any> = {
+  const payload: Record<string, unknown> = {
     review_status: status,
     reviewed_at: now, // keep your existing field if you already use it
   };
@@ -264,7 +216,7 @@ React.useEffect(() => {
   ].map((t) => (
     <button
       key={t.key}
-      onClick={() => setStatusFilter(t.key as any)}
+      onClick={() => setStatusFilter(t.key as typeof statusFilter)}
       className={
         "px-4 py-2 rounded-full border text-sm transition " +
         (statusFilter === t.key
@@ -321,16 +273,22 @@ React.useEffect(() => {
               ? `${row.storage_bucket}:${row.storage_path}`
               : null;
 
-          const signedUrl = key ? signedMap[key] : null;
+          const signedUrl =
+            row.displayUrl ?? row.signed_url ?? (key ? signedMap[key] : null);
 
        const cardPhoto = {
   id: row.id,
   user_id: row.user_id,
+  storage_bucket: row.storage_bucket,
   storage_path: row.storage_path ?? "",
-  review_status: (row.review_status ?? "pending") as any,
+  thumbPath: row.thumbPath ?? null,
+  review_status: row.review_status ?? "pending",
   review_notes: row.review_notes,
   created_at: row.created_at,
   signed_url: signedUrl ?? undefined,
+  displayUrl: signedUrl ?? null,
+  imageUrl: row.imageUrl ?? null,
+  photoUrlError: row.photoUrlError ?? null,
 };
 
 return (

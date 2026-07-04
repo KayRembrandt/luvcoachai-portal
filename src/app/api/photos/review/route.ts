@@ -240,7 +240,67 @@ export async function POST(req: Request) {
       payload.staff_reviewed_by = staff.id;
       payload.staff_notes = notes;
     }
+const { data: photo, error: photoErr } = await svc
+  .from("profile_photos")
+  .select(`
+    id,
+    user_id,
+    storage_bucket,
+    storage_path,
+    public_url,
+    photo_kind,
+    review_status
+  `)
+  .eq("id", photo_id)
+  .maybeSingle();
 
+if (photoErr) {
+  console.error("photos/review photo lookup error:", photoErr);
+  return withCookies(
+    NextResponse.json({ error: photoErr.message }, { status: 500 }),
+  );
+}
+
+if (!photo) {
+  return withCookies(
+    NextResponse.json({ error: "Photo not found" }, { status: 404 }),
+  );
+}
+
+const storagePath = String(photo.storage_path ?? "").toLowerCase();
+const publicUrl = String(photo.public_url ?? "").toLowerCase();
+const photoKind = String(photo.photo_kind ?? "profile").toLowerCase();
+
+const isProfilePhoto = photoKind === "profile";
+
+const hasValidWebpDisplayPath =
+  photo.storage_bucket === "profile-photos" &&
+  storagePath.endsWith(".webp");
+
+const hasBadStoredPublicUrl =
+  !!photo.public_url && !publicUrl.includes(".webp");
+
+if (status === "approved" && isProfilePhoto) {
+  if (!hasValidWebpDisplayPath || hasBadStoredPublicUrl) {
+    return withCookies(
+      NextResponse.json(
+        {
+          error:
+            "Cannot approve this profile photo because its display image is not a valid WebP file.",
+          debug: {
+            photo_id: photo.id,
+            storage_bucket: photo.storage_bucket,
+            storage_path: photo.storage_path,
+            public_url: photo.public_url,
+            photo_kind: photo.photo_kind,
+            review_status: photo.review_status,
+          },
+        },
+        { status: 409 },
+      ),
+    );
+  }
+}
     const { error: updErr } = await svc
       .from("profile_photos")
       .update(payload)
