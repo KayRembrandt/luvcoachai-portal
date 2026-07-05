@@ -28,8 +28,10 @@ export default function ProfileImagePreview({
 }: Props) {
   const [failed, setFailed] = React.useState(false);
   const [srcOverride, setSrcOverride] = React.useState<string | null>(null);
+  const [fallbackSrcOverride, setFallbackSrcOverride] = React.useState<string | null>(null);
   const [triedRefresh, setTriedRefresh] = React.useState(false);
   const currentSrc = srcOverride ?? src;
+  const currentFallbackSrc = fallbackSrcOverride ?? fallbackSrc;
 
   async function handleImageError() {
     const logMeta = {
@@ -53,15 +55,18 @@ export default function ProfileImagePreview({
       try {
         const refreshed = await refreshProfilePhotoSignedUrl(refreshId);
         const refreshedSrc = refreshed.displayUrl ?? refreshed.imageUrl;
+        const refreshedFallbackSrc = refreshed.fallbackUrl ?? refreshed.imageUrl;
 
         console.log("Profile photo signed URL refreshed after render error", {
           ...logMeta,
           refreshedDisplayUrlCreated: !!refreshed.displayUrl,
           refreshedFullUrlCreated: !!refreshed.imageUrl,
+          refreshedFallbackUrlCreated: !!refreshedFallbackSrc,
           refreshedPhotoUrlError: refreshed.photoUrlError,
         });
 
         if (refreshedSrc) {
+          setFallbackSrcOverride(refreshedFallbackSrc);
           setSrcOverride(refreshedSrc);
           return;
         }
@@ -73,8 +78,8 @@ export default function ProfileImagePreview({
       }
     }
 
-    if (fallbackSrc && currentSrc !== fallbackSrc) {
-      setSrcOverride(fallbackSrc);
+    if (currentFallbackSrc && currentSrc !== currentFallbackSrc) {
+      setSrcOverride(currentFallbackSrc);
       return;
     }
 

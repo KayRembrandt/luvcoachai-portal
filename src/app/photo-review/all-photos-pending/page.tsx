@@ -14,6 +14,7 @@ type PhotoRow = {
   signed_url?: string | null;
   displayUrl?: string | null;
   imageUrl?: string | null;
+  fallbackUrl?: string | null;
   photoUrlError?: string | null;
   review_status: string | null;
   review_notes: string | null;
@@ -288,6 +289,7 @@ React.useEffect(() => {
   signed_url: signedUrl ?? undefined,
   displayUrl: signedUrl ?? null,
   imageUrl: row.imageUrl ?? null,
+  fallbackUrl: row.fallbackUrl ?? row.imageUrl ?? null,
   photoUrlError: row.photoUrlError ?? null,
 };
 

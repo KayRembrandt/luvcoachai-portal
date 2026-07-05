@@ -15,6 +15,7 @@ export type SignedPhotoUrlPayload = {
   thumbUrl: string | null;
   imageUrl: string | null;
   displayUrl: string | null;
+  fallbackUrl: string | null;
   signed_url: string | null;
   photoUrlError: string | null;
 };
@@ -61,8 +62,9 @@ export async function signProfilePhotoUrls(
     fullError = error?.message ?? null;
   }
 
-  const photoUrlError = thumbError ?? fullError;
-  const displayUrl = thumbUrl ?? imageUrl;
+  const displayUrl = thumbUrl || imageUrl;
+  const fallbackUrl = imageUrl;
+  const photoUrlError = displayUrl ? null : thumbError ?? fullError;
 
   console.log("profile photo signed URL debug", {
     photoId: photo.id,
@@ -82,6 +84,7 @@ export async function signProfilePhotoUrls(
     thumbUrl,
     imageUrl,
     displayUrl,
+    fallbackUrl,
     signed_url: displayUrl,
     photoUrlError,
   };

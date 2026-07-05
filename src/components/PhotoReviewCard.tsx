@@ -14,6 +14,7 @@ type Props = {
     signed_url?: string | null;
     displayUrl?: string | null;
     imageUrl?: string | null;
+    fallbackUrl?: string | null;
     storage_bucket?: string | null;
     storage_path?: string | null;
     thumbPath?: string | null;
@@ -43,12 +44,15 @@ export default function PhotoReviewCard({
   const [note, setNote] = React.useState("");
   const [previewFailed, setPreviewFailed] = React.useState(false);
   const [srcOverride, setSrcOverride] = React.useState<string | null>(null);
+  const [fallbackSrcOverride, setFallbackSrcOverride] = React.useState<string | null>(null);
   const [triedRefresh, setTriedRefresh] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
 
   const primarySrc = photo.displayUrl ?? photo.signed_url ?? "";
   const fallbackSrc =
-    photo.imageUrl && photo.imageUrl !== primarySrc ? photo.imageUrl : null;
+    fallbackSrcOverride ??
+    photo.fallbackUrl ??
+    (photo.imageUrl && photo.imageUrl !== primarySrc ? photo.imageUrl : null);
   const src = srcOverride ?? primarySrc;
   const canApprove = !!src && !previewFailed && !refreshing;
   const status = photo.review_status ?? "pending";  
@@ -77,15 +81,18 @@ export default function PhotoReviewCard({
       try {
         const refreshed = await refreshProfilePhotoSignedUrl(photo.id);
         const refreshedSrc = refreshed.displayUrl ?? refreshed.imageUrl;
+        const refreshedFallbackSrc = refreshed.fallbackUrl ?? refreshed.imageUrl;
 
         console.log("Profile photo signed URL refreshed after render error", {
           ...logMeta,
           refreshedDisplayUrlCreated: !!refreshed.displayUrl,
           refreshedFullUrlCreated: !!refreshed.imageUrl,
+          refreshedFallbackUrlCreated: !!refreshedFallbackSrc,
           refreshedPhotoUrlError: refreshed.photoUrlError,
         });
 
         if (refreshedSrc) {
+          setFallbackSrcOverride(refreshedFallbackSrc);
           setSrcOverride(refreshedSrc);
           setRefreshing(false);
           return;

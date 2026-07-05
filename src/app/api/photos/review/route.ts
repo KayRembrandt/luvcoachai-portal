@@ -2,6 +2,20 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import sharp from "sharp";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const maxDuration = 60;
+
+const PROFILE_PHOTOS_BUCKET =
+  process.env.PROFILE_PHOTOS_BUCKET ||
+  process.env.NEXT_PUBLIC_PROFILE_PHOTOS_BUCKET ||
+  "profile_photos";
+
+const MAX_INPUT_PIXELS = 64_000_000;
+const WEBP_QUALITY = 88;
 
 type ReviewStatus = "approved" | "needs_attention" | "rejected";
 type Actor = "staff" | "admin";
@@ -26,6 +40,142 @@ function isAllowedStaffStatus(status: unknown) {
   const s = String(status ?? "").toLowerCase();
   return s === "active" || s === "approved";
 }
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function isWebpPath(path: string) {
+  return path.toLowerCase().endsWith(".webp");
+}
+
+function webpPathFor(originalPath: string, photoId: string) {
+  const slashIndex = originalPath.lastIndexOf("/");
+  const folder = slashIndex >= 0 ? originalPath.slice(0, slashIndex + 1) : "";
+  const fileName = slashIndex >= 0 ? originalPath.slice(slashIndex + 1) : originalPath;
+  const baseName = fileName.includes(".")
+    ? fileName.replace(/\.[^./]+$/, "")
+    : fileName || photoId;
+
+  return `${folder}${baseName}.webp`;
+}
+
+async function downloadPhotoFromAvailableBucket(
+  svc: ReturnType<typeof getServiceSupabase>,
+  input: {
+    preferredBucket: string | null | undefined;
+    storagePath: string;
+  },
+) {
+  const bucketCandidates = uniqueStrings([
+    input.preferredBucket,
+    PROFILE_PHOTOS_BUCKET,
+    "profile_photos",
+    "profile-photos",
+  ]);
+
+  let lastError: string | null = null;
+
+  for (const bucket of bucketCandidates) {
+    const downloaded = await svc.storage.from(bucket).download(input.storagePath);
+
+    if (!downloaded.error && downloaded.data) {
+      return {
+        bucket,
+        file: downloaded.data,
+      };
+    }
+
+    lastError = downloaded.error?.message ?? "No file returned.";
+  }
+
+  throw new Error(
+    `Could not download the original photo from storage. Last error: ${lastError ?? "Unknown storage error."}`,
+  );
+}
+
+async function ensureApprovedWebpDisplayCopy(
+  svc: ReturnType<typeof getServiceSupabase>,
+  photo: {
+    id: string;
+    storage_bucket: string | null;
+    storage_path: string | null;
+  },
+) {
+  const originalPath = String(photo.storage_path ?? "").trim();
+
+  if (!originalPath) {
+    throw new Error("This photo is missing its storage path.");
+  }
+
+  if (isWebpPath(originalPath)) {
+    return {
+      converted: false,
+      bucket: photo.storage_bucket || PROFILE_PHOTOS_BUCKET,
+      originalPath,
+      approvedPath: originalPath,
+      originalBytes: null as number | null,
+      webpBytes: null as number | null,
+      width: null as number | null,
+      height: null as number | null,
+    };
+  }
+
+  const downloaded = await downloadPhotoFromAvailableBucket(svc, {
+    preferredBucket: photo.storage_bucket,
+    storagePath: originalPath,
+  });
+
+  const inputBuffer = Buffer.from(await downloaded.file.arrayBuffer());
+
+  if (inputBuffer.byteLength <= 0) {
+    throw new Error("The original photo file is empty.");
+  }
+
+  const metadata = await sharp(inputBuffer, { limitInputPixels: MAX_INPUT_PIXELS })
+    .rotate()
+    .metadata();
+  const width = metadata.width ?? null;
+  const height = metadata.height ?? null;
+
+  if (!width || !height) {
+    throw new Error("The original photo dimensions could not be read.");
+  }
+
+  const webpBuffer = await sharp(inputBuffer, { limitInputPixels: MAX_INPUT_PIXELS })
+    .rotate()
+    .webp({ quality: WEBP_QUALITY, effort: 4 })
+    .toBuffer();
+
+  const approvedPath = webpPathFor(originalPath, photo.id);
+  const uploaded = await svc.storage.from(downloaded.bucket).upload(approvedPath, webpBuffer, {
+    cacheControl: "3600",
+    contentType: "image/webp",
+    upsert: true,
+  });
+
+  if (uploaded.error) {
+    throw new Error(`Could not save the converted WebP photo: ${uploaded.error.message}`);
+  }
+
+  return {
+    converted: true,
+    bucket: downloaded.bucket,
+    originalPath,
+    approvedPath,
+    originalBytes: inputBuffer.byteLength,
+    webpBytes: webpBuffer.byteLength,
+    width,
+    height,
+  };
+}
+
 
 async function tryResolvePhotoReviewNotification(
   svc: ReturnType<typeof getServiceSupabase>,
@@ -267,26 +417,29 @@ if (!photo) {
   );
 }
 
-const storagePath = String(photo.storage_path ?? "").toLowerCase();
-const publicUrl = String(photo.public_url ?? "").toLowerCase();
 const photoKind = String(photo.photo_kind ?? "profile").toLowerCase();
-
 const isProfilePhoto = photoKind === "profile";
 
-const hasValidWebpDisplayPath =
-  photo.storage_bucket === "profile-photos" &&
-  storagePath.endsWith(".webp");
-
-const hasBadStoredPublicUrl =
-  !!photo.public_url && !publicUrl.includes(".webp");
+let conversion:
+  | Awaited<ReturnType<typeof ensureApprovedWebpDisplayCopy>>
+  | null = null;
 
 if (status === "approved" && isProfilePhoto) {
-  if (!hasValidWebpDisplayPath || hasBadStoredPublicUrl) {
+  try {
+    conversion = await ensureApprovedWebpDisplayCopy(svc, photo);
+
+    payload.storage_bucket = conversion.bucket;
+    payload.storage_path = conversion.approvedPath;
+    payload.public_url = null;
+  } catch (conversionErr: any) {
+    console.error("photos/review WebP conversion failed:", conversionErr);
+
     return withCookies(
       NextResponse.json(
         {
           error:
-            "Cannot approve this profile photo because its display image is not a valid WebP file.",
+            "This photo could not be converted to WebP, so it was not approved yet.",
+          detail: conversionErr?.message ?? String(conversionErr),
           debug: {
             photo_id: photo.id,
             storage_bucket: photo.storage_bucket,
@@ -296,7 +449,7 @@ if (status === "approved" && isProfilePhoto) {
             review_status: photo.review_status,
           },
         },
-        { status: 409 },
+        { status: 415 },
       ),
     );
   }
@@ -330,6 +483,21 @@ if (status === "approved" && isProfilePhoto) {
           photo_id,
           status,
           actor,
+          webp_conversion:
+            conversion && status === "approved"
+              ? {
+                  converted: conversion.converted,
+                  original_kept: true,
+                  original_bucket: conversion.bucket,
+                  original_path: conversion.originalPath,
+                  approved_bucket: conversion.bucket,
+                  approved_path: conversion.approvedPath,
+                  width: conversion.width,
+                  height: conversion.height,
+                  original_bytes: conversion.originalBytes,
+                  webp_bytes: conversion.webpBytes,
+                }
+              : null,
         },
       }),
     );

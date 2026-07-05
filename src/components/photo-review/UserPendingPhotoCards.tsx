@@ -11,6 +11,7 @@ export type PendingPhoto = {
   signed_url?: string | null;
   displayUrl?: string | null;
   imageUrl?: string | null;
+  fallbackUrl?: string | null;
   storage_bucket?: string | null;
   storage_path?: string | null;
   thumbPath?: string | null;

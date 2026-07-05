@@ -88,6 +88,7 @@ export async function logFailedImageResponse(src: string, meta?: Record<string, 
     hasThumbUrl: !!json?.thumbUrl,
     hasImageUrl: !!json?.imageUrl,
     hasDisplayUrl: !!json?.displayUrl,
+    hasFallbackUrl: !!json?.fallbackUrl,
     error: json?.error ?? json?.photoUrlError ?? null,
   });
 
@@ -99,7 +100,7 @@ export async function logFailedImageResponse(src: string, meta?: Record<string, 
     thumbUrl: string | null;
     imageUrl: string | null;
     displayUrl: string | null;
+    fallbackUrl: string | null;
     photoUrlError: string | null;
   };
 }
-
