@@ -1,10 +1,16 @@
 "use client";
 
 import React from "react";
+import {
+  isSignedSupabaseStorageUrl,
+  logFailedImageResponse,
+  refreshProfilePhotoSignedUrl,
+} from "@/lib/photoSignedUrlClient";
 
 type Props = {
   src: string | null;
   fallbackSrc?: string | null;
+  photoId?: string | null;
   alt: string;
   className?: string;
   fallbackClassName?: string;
@@ -14,6 +20,7 @@ type Props = {
 export default function ProfileImagePreview({
   src,
   fallbackSrc,
+  photoId,
   alt,
   className,
   fallbackClassName,
@@ -21,7 +28,58 @@ export default function ProfileImagePreview({
 }: Props) {
   const [failed, setFailed] = React.useState(false);
   const [srcOverride, setSrcOverride] = React.useState<string | null>(null);
+  const [triedRefresh, setTriedRefresh] = React.useState(false);
   const currentSrc = srcOverride ?? src;
+
+  async function handleImageError() {
+    const logMeta = {
+      ...meta,
+      photoId: photoId ?? meta?.photoId,
+      displayUrl: currentSrc,
+    };
+
+    console.error("Profile photo failed to render", logMeta);
+
+    if (currentSrc && isSignedSupabaseStorageUrl(currentSrc)) {
+      await logFailedImageResponse(currentSrc, logMeta);
+    }
+
+    const refreshId =
+      photoId ?? (typeof meta?.photoId === "string" ? meta.photoId : null);
+
+    if (currentSrc && !triedRefresh && refreshId && isSignedSupabaseStorageUrl(currentSrc)) {
+      setTriedRefresh(true);
+
+      try {
+        const refreshed = await refreshProfilePhotoSignedUrl(refreshId);
+        const refreshedSrc = refreshed.displayUrl ?? refreshed.imageUrl;
+
+        console.log("Profile photo signed URL refreshed after render error", {
+          ...logMeta,
+          refreshedDisplayUrlCreated: !!refreshed.displayUrl,
+          refreshedFullUrlCreated: !!refreshed.imageUrl,
+          refreshedPhotoUrlError: refreshed.photoUrlError,
+        });
+
+        if (refreshedSrc) {
+          setSrcOverride(refreshedSrc);
+          return;
+        }
+      } catch (error) {
+        console.error("Profile photo signed URL refresh failed", {
+          ...logMeta,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (fallbackSrc && currentSrc !== fallbackSrc) {
+      setSrcOverride(fallbackSrc);
+      return;
+    }
+
+    setFailed(true);
+  }
 
   if (!currentSrc || failed) {
     return (
@@ -42,17 +100,7 @@ export default function ProfileImagePreview({
       src={currentSrc}
       alt={alt}
       className={className}
-      onError={() => {
-        console.error("Profile photo failed to render", {
-          ...meta,
-          displayUrl: currentSrc,
-        });
-        if (fallbackSrc && currentSrc !== fallbackSrc) {
-          setSrcOverride(fallbackSrc);
-          return;
-        }
-        setFailed(true);
-      }}
+      onError={() => void handleImageError()}
     />
   );
 }

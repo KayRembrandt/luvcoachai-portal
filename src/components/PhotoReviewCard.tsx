@@ -1,6 +1,11 @@
 "use client";
 
 import React from "react";
+import {
+  isSignedSupabaseStorageUrl,
+  logFailedImageResponse,
+  refreshProfilePhotoSignedUrl,
+} from "@/lib/photoSignedUrlClient";
 
 type Props = {
   photo: {
@@ -38,13 +43,70 @@ export default function PhotoReviewCard({
   const [note, setNote] = React.useState("");
   const [previewFailed, setPreviewFailed] = React.useState(false);
   const [srcOverride, setSrcOverride] = React.useState<string | null>(null);
+  const [triedRefresh, setTriedRefresh] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
 
   const primarySrc = photo.displayUrl ?? photo.signed_url ?? "";
   const fallbackSrc =
     photo.imageUrl && photo.imageUrl !== primarySrc ? photo.imageUrl : null;
   const src = srcOverride ?? primarySrc;
-  const canApprove = !!src && !previewFailed;
+  const canApprove = !!src && !previewFailed && !refreshing;
   const status = photo.review_status ?? "pending";  
+
+  async function handleImageError() {
+    const logMeta = {
+      photoId: photo.id,
+      userId: photo.user_id,
+      storageBucket: photo.storage_bucket,
+      storagePath: photo.storage_path,
+      thumbPath: photo.thumbPath,
+      displayUrl: src,
+      photoUrlError: photo.photoUrlError,
+    };
+
+    console.error("Profile photo failed to render", logMeta);
+
+    if (isSignedSupabaseStorageUrl(src)) {
+      await logFailedImageResponse(src, logMeta);
+    }
+
+    if (!triedRefresh && isSignedSupabaseStorageUrl(src)) {
+      setTriedRefresh(true);
+      setRefreshing(true);
+
+      try {
+        const refreshed = await refreshProfilePhotoSignedUrl(photo.id);
+        const refreshedSrc = refreshed.displayUrl ?? refreshed.imageUrl;
+
+        console.log("Profile photo signed URL refreshed after render error", {
+          ...logMeta,
+          refreshedDisplayUrlCreated: !!refreshed.displayUrl,
+          refreshedFullUrlCreated: !!refreshed.imageUrl,
+          refreshedPhotoUrlError: refreshed.photoUrlError,
+        });
+
+        if (refreshedSrc) {
+          setSrcOverride(refreshedSrc);
+          setRefreshing(false);
+          return;
+        }
+      } catch (error) {
+        console.error("Profile photo signed URL refresh failed", {
+          ...logMeta,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      setRefreshing(false);
+    }
+
+    if (fallbackSrc && src !== fallbackSrc) {
+      setSrcOverride(fallbackSrc);
+      return;
+    }
+
+    setPreviewFailed(true);
+  }
   function closeNote() {
     setNoteMode(null);
     setNote("");
@@ -72,22 +134,7 @@ export default function PhotoReviewCard({
                 src={src}
                 alt="Pending photo"
                 className="block w-full h-auto object-contain max-h-[420px]"
-                onError={() => {
-                  console.error("Profile photo failed to render", {
-                    photoId: photo.id,
-                    userId: photo.user_id,
-                    storageBucket: photo.storage_bucket,
-                    storagePath: photo.storage_path,
-                    thumbPath: photo.thumbPath,
-                    displayUrl: src,
-                    photoUrlError: photo.photoUrlError,
-                  });
-                  if (fallbackSrc && src !== fallbackSrc) {
-                    setSrcOverride(fallbackSrc);
-                    return;
-                  }
-                  setPreviewFailed(true);
-                }}
+                onError={() => void handleImageError()}
               />
             ) : (
               <div className="flex h-[220px] w-full items-center justify-center text-sm text-gray-500">

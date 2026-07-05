@@ -114,7 +114,13 @@ function renderItemsAsPills(value: any) {
   );
 }
 
-function PhotosCard({ heroUrl }: { heroUrl: string | null }) {
+function PhotosCard({
+  heroUrl,
+  heroPhotoId,
+}: {
+  heroUrl: string | null;
+  heroPhotoId: string | null;
+}) {
   return (
     <div className="rounded-2xl border bg-white p-4">
       <div className="text-sm font-semibold text-slate-800 mb-2">
@@ -124,6 +130,7 @@ function PhotosCard({ heroUrl }: { heroUrl: string | null }) {
       <div className="aspect-square w-full overflow-hidden rounded-2xl bg-slate-100 border border-slate-200">
         <ProfileImagePreview
           src={heroUrl}
+          photoId={heroPhotoId}
           alt="Profile photo"
           className="h-full w-full object-cover"
           fallbackClassName="flex h-full w-full items-center justify-center text-slate-400 text-sm"
@@ -469,14 +476,6 @@ approvedRows.sort((a, b) => {
   return String(b.created_at).localeCompare(String(a.created_at));
 });
 
-// ✅ 5) Approved URLs derived from signedMap + approved rows
-const approvedUrls = approvedRows
-  .map((r) => {
-    if (!r?.storage_path) return null;
-    return signedMap?.[r.storage_path] ?? null;
-  })
-  .filter((u): u is string => typeof u === "string" && u.length > 0);
-
 const approvedPhotoViews = approvedRows.map((r) => ({
   id: r.id as string,
   url: r.displayUrl ?? null,
@@ -502,6 +501,7 @@ const heroRow =
 
 const heroUrl =
   heroRow?.storage_path ? signedMap?.[heroRow.storage_path] ?? null : null;
+const heroPhotoId = heroRow?.id ?? null;
 
 console.log("USER360 heroUrl", heroUrl);
 
@@ -572,7 +572,7 @@ console.log("USER360 rejectedCardPhotos sample", rejectedCardPhotos[0]);
             <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 lg:sticky lg:top-6 space-y-5">
               <div className="flex flex-col items-center gap-3">
               <div className="h-124 w-84 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden">
-                 <PhotosCard heroUrl={heroUrl} />
+                 <PhotosCard heroUrl={heroUrl} heroPhotoId={heroPhotoId} />
                 </div>
                 
                 <div className="min-w-0">
@@ -773,6 +773,7 @@ console.log("USER360 rejectedCardPhotos sample", rejectedCardPhotos[0]);
               <ProfileImagePreview
                 src={photo.url}
                 fallbackSrc={photo.fullUrl}
+                photoId={photo.id}
                 alt={`Approved photo ${i + 1}`}
                 className="h-40 w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
                 fallbackClassName="flex h-40 w-full items-center justify-center text-sm text-slate-500"

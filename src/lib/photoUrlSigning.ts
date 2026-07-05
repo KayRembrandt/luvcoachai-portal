@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+export const PROFILE_PHOTO_SIGNED_URL_TTL_SECONDS = 60 * 60;
+
 export type PhotoStorageRow = {
   id: string;
   user_id?: string | null;
@@ -30,7 +32,7 @@ export function makeThumbPath(storagePath: string) {
 export async function signProfilePhotoUrls(
   supabaseAdmin: SupabaseClient,
   photo: PhotoStorageRow,
-  expiresInSeconds = 60 * 10,
+  expiresInSeconds = PROFILE_PHOTO_SIGNED_URL_TTL_SECONDS,
 ): Promise<SignedPhotoUrlPayload> {
   const bucket = photo.storage_bucket ?? "profile-photos";
   const fullPath = photo.storage_path ?? null;
@@ -88,7 +90,7 @@ export async function signProfilePhotoUrls(
 export async function signProfilePhotoRows<T extends PhotoStorageRow>(
   supabaseAdmin: SupabaseClient,
   photos: T[],
-  expiresInSeconds = 60 * 10,
+  expiresInSeconds = PROFILE_PHOTO_SIGNED_URL_TTL_SECONDS,
 ): Promise<Array<T & SignedPhotoUrlPayload>> {
   return Promise.all(
     photos.map(async (photo) => ({
@@ -97,4 +99,3 @@ export async function signProfilePhotoRows<T extends PhotoStorageRow>(
     })),
   );
 }
-
