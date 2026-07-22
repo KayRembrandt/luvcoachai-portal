@@ -16,14 +16,32 @@ type PendingUserRow = {
   needs_attention_count: number;
   rejected_count: number;
   approved_count: number;
-  oldest_pending_at: string;
-  newest_pending_at: string;
+  oldest_pending_at: string | null;
+  newest_pending_at: string | null;
+
+  // The API should return this for every user, including approved-only users.
+  // The fallbacks below keep the page compatible with the older response.
+  latest_photo_at?: string | null;
+  latest_activity_at?: string | null;
 };
 
 type NotificationSummary = {
   unreadCount: number;
   newestAt: string | null;
 };
+
+type QueueFilter = "pending" | "needs_attention" | "rejected" | "all";
+
+type PaginationState = {
+  total: number | null;
+  hasNext: boolean;
+};
+
+type LoadOptions = {
+  silent?: boolean;
+};
+
+const PAGE_SIZE = 25;
 
 function calcAge(dob: string | null) {
   if (!dob) return null;
@@ -41,7 +59,62 @@ function calcAge(dob: string | null) {
   return age;
 }
 
-type QueueFilter = "pending" | "needs_attention" | "rejected" | "all";
+function asFiniteNumber(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+
+  return null;
+}
+
+function asBoolean(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "boolean") return value;
+    if (value === "true") return true;
+    if (value === "false") return false;
+  }
+
+  return null;
+}
+
+function getMostRecentAt(row: PendingUserRow) {
+  return (
+    row.latest_photo_at ??
+    row.latest_activity_at ??
+    row.newest_pending_at ??
+    row.oldest_pending_at ??
+    null
+  );
+}
+
+function getTimestamp(value: string | null | undefined) {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function sortNewestFirst(rows: PendingUserRow[]) {
+  return [...rows].sort((a, b) => {
+    const dateDifference =
+      getTimestamp(getMostRecentAt(b)) - getTimestamp(getMostRecentAt(a));
+
+    if (dateDifference !== 0) return dateDifference;
+
+    const aName = a.display_name ?? a.screen_name ?? a.user_id;
+    const bName = b.display_name ?? b.screen_name ?? b.user_id;
+    return aName.localeCompare(bName);
+  });
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
 
 export default function PhotoReviewPage() {
   const router = useRouter();
@@ -51,124 +124,200 @@ export default function PhotoReviewPage() {
   const [loading, setLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] =
     React.useState<QueueFilter>("pending");
+  const [page, setPage] = React.useState(1);
+  const [pagination, setPagination] = React.useState<PaginationState>({
+    total: null,
+    hasNext: false,
+  });
   const [notificationSummary, setNotificationSummary] =
     React.useState<NotificationSummary | null>(null);
 
-  async function load(options: { silent?: boolean } = {}) {
-    const silent = options.silent === true;
+  const activeRequestRef = React.useRef<AbortController | null>(null);
 
-    if (!silent) {
-      setLoading(true);
-      setError(null);
-    }
+  const load = React.useCallback(
+    async (options: LoadOptions = {}) => {
+      const silent = options.silent === true;
+      const controller = new AbortController();
 
-    try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabaseBrowser.auth.getSession();
+      activeRequestRef.current?.abort();
+      activeRequestRef.current = controller;
 
-      if (sessionError) {
-        console.error("PhotoReviewPage getSession error:", sessionError);
-        setError(sessionError.message || "Could not verify your session.");
-        setRows([]);
-        return;
+      if (!silent) {
+        setLoading(true);
+        setError(null);
       }
 
-      const token = session?.access_token ?? null;
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabaseBrowser.auth.getSession();
 
-      if (!token) {
-        console.error("PhotoReviewPage: no access token found.");
-        setError("Not logged in.");
-        setRows([]);
-        return;
-      }
+        if (sessionError) {
+          console.error("PhotoReviewPage getSession error:", sessionError);
+          setError(sessionError.message || "Could not verify your session.");
+          setRows([]);
+          setPagination({ total: null, hasNext: false });
+          return;
+        }
 
-      console.log("PhotoReviewPage load session:", {
-        auth_user_id: session?.user?.id ?? null,
-        auth_email: session?.user?.email ?? null,
-        hasToken: !!token,
-      });
+        const token = session?.access_token ?? null;
 
-      const res = await fetch(
-        `/api/photos/pending-users?status=${encodeURIComponent(statusFilter)}`,
-        {
+        if (!token) {
+          console.error("PhotoReviewPage: no access token found.");
+          setError("Not logged in.");
+          setRows([]);
+          setPagination({ total: null, hasNext: false });
+          return;
+        }
+
+        const offset = (page - 1) * PAGE_SIZE;
+        const params = new URLSearchParams({
+          status: statusFilter,
+          page: String(page),
+          pageSize: String(PAGE_SIZE),
+          limit: String(PAGE_SIZE),
+          offset: String(offset),
+          sort: "latest_photo_at",
+          order: "desc",
+        });
+
+        // "All" should mean every user with a non-archived profile photo,
+        // including users whose photos are all approved.
+        if (statusFilter === "all") {
+          params.set("includeApprovedOnly", "true");
+        }
+
+        const res = await fetch(`/api/photos/pending-users?${params}`, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
           },
           cache: "no-store",
-        },
-      );
-
-      const json = await res.json().catch(() => ({}));
-
-      console.log("PhotoReviewPage pending-users response:", res.status, json);
-
-      if (!res.ok) {
-        setError(json?.error ?? `Failed to load (${res.status})`);
-        setRows(json?.rows ?? json?.users ?? []);
-        return;
-      }
-
-      setRows(json?.rows ?? json?.users ?? []);
-      setError(null);
-
-      const {
-        count,
-        data: notificationRows,
-        error: notificationError,
-      } = await supabaseBrowser
-        .from("photo_review_notifications")
-        .select("id, created_at", { count: "exact" })
-        .eq("status", "unread")
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (notificationError) {
-        // Do not break the queue if the notification table or RLS policy is not deployed yet.
-        console.warn(
-          "PhotoReviewPage notification summary skipped:",
-          notificationError.message,
-        );
-        setNotificationSummary(null);
-      } else {
-        setNotificationSummary({
-          unreadCount: count ?? notificationRows?.length ?? 0,
-          newestAt: notificationRows?.[0]?.created_at ?? null,
+          signal: controller.signal,
         });
-      }
-    } catch (err: any) {
-      console.error("PhotoReviewPage load failed:", err);
 
-      if (
-        err?.name === "AbortError" ||
-        String(err?.message ?? "")
-          .toLowerCase()
-          .includes("aborted")
-      ) {
-        return;
-      }
+        const json = await res.json().catch(() => ({}));
+        const rawRows = Array.isArray(json?.rows)
+          ? json.rows
+          : Array.isArray(json?.users)
+            ? json.users
+            : [];
+        const nextRows = sortNewestFirst(rawRows as PendingUserRow[]);
+        const responsePagination = json?.pagination ?? {};
+        const total = asFiniteNumber(
+          responsePagination?.total,
+          responsePagination?.totalCount,
+          json?.total,
+          json?.totalCount,
+        );
+        const explicitHasNext = asBoolean(
+          responsePagination?.hasNext,
+          responsePagination?.hasMore,
+          json?.hasNext,
+          json?.hasMore,
+        );
+        const hasNext =
+          explicitHasNext ??
+          (total !== null
+            ? offset + nextRows.length < total
+            : nextRows.length === PAGE_SIZE);
 
-      setError(err?.message ?? "Something went wrong while loading.");
-    } finally {
-      if (!silent) {
-        setLoading(false);
+        console.log("PhotoReviewPage pending-users response:", res.status, {
+          ...json,
+          rows: `[${nextRows.length} rows]`,
+        });
+
+        if (!res.ok) {
+          setError(json?.error ?? `Failed to load (${res.status})`);
+          setRows(nextRows);
+          setPagination({ total, hasNext });
+          return;
+        }
+
+        // This fallback sort fixes an older API response that arrived oldest-first.
+        // The API must also sort before applying OFFSET/LIMIT so pagination is
+        // globally newest-first, not merely newest-first inside each page.
+        setRows(nextRows);
+        setPagination({ total, hasNext });
+        setError(null);
+
+        const {
+          count,
+          data: notificationRows,
+          error: notificationError,
+        } = await supabaseBrowser
+          .from("photo_review_notifications")
+          .select("id, created_at", { count: "exact" })
+          .eq("status", "unread")
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (notificationError) {
+          // Do not break the queue if this table or its RLS policy is not deployed.
+          console.warn(
+            "PhotoReviewPage notification summary skipped:",
+            notificationError.message,
+          );
+          setNotificationSummary(null);
+        } else {
+          setNotificationSummary({
+            unreadCount: count ?? notificationRows?.length ?? 0,
+            newestAt: notificationRows?.[0]?.created_at ?? null,
+          });
+        }
+      } catch (loadError: unknown) {
+        if (
+          loadError instanceof DOMException &&
+          loadError.name === "AbortError"
+        ) {
+          return;
+        }
+
+        if (
+          errorMessage(loadError, "")
+            .toLowerCase()
+            .includes("aborted")
+        ) {
+          return;
+        }
+
+        console.error("PhotoReviewPage load failed:", loadError);
+        setError(
+          errorMessage(
+            loadError,
+            "Something went wrong while loading the photo queue.",
+          ),
+        );
+      } finally {
+        if (activeRequestRef.current === controller) {
+          activeRequestRef.current = null;
+          if (!silent) setLoading(false);
+        }
       }
-    }
-  }
+    },
+    [page, statusFilter],
+  );
 
   React.useEffect(() => {
-    load();
+    void load();
 
-    // This gives staff an in-portal notification even if they leave the queue open.
+    // Staff can leave the queue open and still see fresh uploads.
     const intervalId = window.setInterval(() => {
-      load({ silent: true });
+      void load({ silent: true });
     }, 30_000);
 
-    return () => window.clearInterval(intervalId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
+    return () => {
+      window.clearInterval(intervalId);
+      activeRequestRef.current?.abort();
+    };
+  }, [load]);
+
+  function changeFilter(nextFilter: QueueFilter) {
+    if (nextFilter === statusFilter) return;
+    setPage(1);
+    setStatusFilter(nextFilter);
+  }
 
   function getAwaitingCount(row: PendingUserRow) {
     if (statusFilter === "needs_attention") return row.needs_attention_count;
@@ -178,6 +327,24 @@ export default function PhotoReviewPage() {
   }
 
   const unreadNotificationCount = notificationSummary?.unreadCount ?? 0;
+  const totalPages =
+    pagination.total !== null
+      ? Math.max(1, Math.ceil(pagination.total / PAGE_SIZE))
+      : null;
+  const canGoPrevious = page > 1 && !loading;
+  const canGoNext =
+    !loading &&
+    (totalPages !== null ? page < totalPages : pagination.hasNext);
+  const firstVisible = rows.length > 0 ? (page - 1) * PAGE_SIZE + 1 : 0;
+  const lastVisible = rows.length > 0 ? firstVisible + rows.length - 1 : 0;
+  const visibleCountLabel =
+    pagination.total !== null
+      ? `${pagination.total} ${pagination.total === 1 ? "user" : "users"}`
+      : `${rows.length} ${rows.length === 1 ? "user" : "users"} on this page`;
+  const queueDescription =
+    statusFilter === "all"
+      ? "All users with profile photos"
+      : "Queue of users with photos awaiting review";
 
   return (
     <div className="p-6">
@@ -187,13 +354,13 @@ export default function PhotoReviewPage() {
             Photo Review
           </h1>
           <p className="mt-1 text-sm text-gray-600">
-            Queue of users with photos awaiting review • {rows.length} users
+            {queueDescription} • {visibleCountLabel}
           </p>
         </div>
 
         <button
           type="button"
-          onClick={() => load()}
+          onClick={() => void load()}
           disabled={loading}
           className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -234,7 +401,7 @@ export default function PhotoReviewPage() {
             <button
               key={item.key}
               type="button"
-              onClick={() => setStatusFilter(item.key as QueueFilter)}
+              onClick={() => changeFilter(item.key as QueueFilter)}
               className={[
                 "rounded-full border px-4 py-2 text-sm transition",
                 active
@@ -254,14 +421,16 @@ export default function PhotoReviewPage() {
           <div className="col-span-2">Age / Gender</div>
           <div className="col-span-2">Tier / Status</div>
           <div className="col-span-2">Awaiting / Approved</div>
-          <div className="col-span-2">Oldest Pending</div>
+          <div className="col-span-2">Most Recent ↓</div>
         </div>
 
         {loading ? (
           <div className="p-6 text-sm text-gray-600">Loading…</div>
         ) : rows.length === 0 ? (
           <div className="p-6 text-sm text-gray-600">
-            Nothing in this queue right now 🎉
+            {statusFilter === "all"
+              ? "No users with profile photos were found."
+              : "Nothing in this queue right now 🎉"}
           </div>
         ) : (
           rows.map((row) => {
@@ -271,6 +440,7 @@ export default function PhotoReviewPage() {
             const tier = row.tier ?? "—";
             const status = row.status ?? "—";
             const awaiting = getAwaitingCount(row);
+            const mostRecentAt = getMostRecentAt(row);
 
             return (
               <button
@@ -300,14 +470,53 @@ export default function PhotoReviewPage() {
                 </div>
 
                 <div className="col-span-2 text-sm text-gray-800">
-                  {row.oldest_pending_at
-                    ? new Date(row.oldest_pending_at).toLocaleString()
+                  {mostRecentAt
+                    ? new Date(mostRecentAt).toLocaleString()
                     : "—"}
                 </div>
               </button>
             );
           })
         )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-gray-500">
+          {rows.length > 0 ? (
+            <>
+              Showing {firstVisible}–{lastVisible}
+              {pagination.total !== null ? ` of ${pagination.total}` : ""} •
+              newest photos first
+            </>
+          ) : (
+            "Newest photos appear first."
+          )}
+        </p>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={!canGoPrevious}
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Previous
+          </button>
+
+          <span className="min-w-24 text-center text-sm text-gray-600">
+            Page {page}
+            {totalPages !== null ? ` of ${totalPages}` : ""}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setPage((current) => current + 1)}
+            disabled={!canGoNext}
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
       </div>
 
       <p className="mt-3 text-xs text-gray-500">

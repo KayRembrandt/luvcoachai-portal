@@ -78,7 +78,7 @@ export async function GET(req: Request) {
     // Which statuses count as “awaiting” depends on the filter
     const statusList =
       status === "all"
-        ? ["pending", "needs_attention", "rejected"]
+        ? ["pending", "approved","needs_attention", "rejected"]
         : [status];
 
     // 1) Get photos in the selected queue (for grouping/counts)
