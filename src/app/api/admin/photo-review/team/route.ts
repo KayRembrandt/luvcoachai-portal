@@ -1,9 +1,11 @@
 import { NextRequest } from "next/server";
 import {
+  DEFAULT_PHOTO_REVIEW_TIMEZONE,
   getSupabaseAdmin,
   isAllowedStaffStatus,
   isCoverageOnNow,
   normalizeTime,
+  loadAuthEmailMap,
   normalizeTimezone,
   pickStaffEmail,
   requireAdmin,
@@ -89,6 +91,8 @@ export async function GET(req: NextRequest) {
       .filter(isActiveStaff)
       .sort(sortStaff);
 
+    const authEmailByUserId = await loadAuthEmailMap(supabase, staffRows);
+
     const teamRows = (teamResult.data ?? []) as PhotoReviewTeamRow[];
     const coverageRows = (coverageResult.data ?? []) as PhotoReviewCoverageRow[];
 
@@ -110,7 +114,7 @@ export async function GET(req: NextRequest) {
         staff,
         team,
         coverage: memberCoverage,
-        inferred_email: pickStaffEmail(staff),
+        inferred_email: pickStaffEmail(staff, authEmailByUserId),
         on_duty: onDuty,
       };
     });
@@ -141,26 +145,44 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "Unknown action." }, { status: 400 });
     }
 
-    const { data: staffRows, error: staffError } = await supabase
-      .from("staff")
-      .select("*");
+    const [staffResult, teamResult] = await Promise.all([
+      supabase.from("staff").select("*"),
+      supabase.from("staff_photo_review_team").select("*"),
+    ]);
 
-    if (staffError) throw staffError;
+    if (staffResult.error) throw staffResult.error;
+    if (teamResult.error) throw teamResult.error;
 
-    const activeStaff = ((staffRows ?? []) as StaffRow[]).filter(isActiveStaff);
+    const activeStaff = ((staffResult.data ?? []) as StaffRow[]).filter(isActiveStaff);
+    const existingTeamRows = (teamResult.data ?? []) as PhotoReviewTeamRow[];
+    const existingByStaffId = new Map(existingTeamRows.map((row) => [row.staff_id, row]));
+    const authEmailByUserId = await loadAuthEmailMap(supabase, activeStaff);
 
-    const rowsToUpsert = activeStaff.map((staff) => ({
-      staff_id: staff.id,
-      application_status: "approved",
-      email_address: pickStaffEmail(staff),
-      email_enabled: true,
-      sms_enabled: false,
-      timezone: "America/New_York",
-      updated_at: new Date().toISOString(),
-    }));
+    let emailFilled = 0;
+    let missingEmail = 0;
+
+    const rowsToUpsert = activeStaff.map((staff) => {
+      const existing = existingByStaffId.get(staff.id);
+      const existingEmail = String(existing?.email_address ?? "").trim();
+      const defaultEmail = pickStaffEmail(staff, authEmailByUserId);
+      const emailAddress = existingEmail || defaultEmail;
+
+      if (!existingEmail && emailAddress) emailFilled += 1;
+      if (!emailAddress) missingEmail += 1;
+
+      return {
+        staff_id: staff.id,
+        application_status: existing?.application_status ?? "approved",
+        email_address: emailAddress,
+        email_enabled: existing?.email_enabled ?? true,
+        sms_enabled: existing?.sms_enabled ?? false,
+        timezone: normalizeTimezone(existing?.timezone ?? DEFAULT_PHOTO_REVIEW_TIMEZONE),
+        updated_at: new Date().toISOString(),
+      };
+    });
 
     if (rowsToUpsert.length === 0) {
-      return Response.json({ ok: true, upserted: 0 });
+      return Response.json({ ok: true, upserted: 0, email_filled: 0, missing_email: 0 });
     }
 
     const { error: upsertError } = await supabase
@@ -172,7 +194,13 @@ export async function POST(req: NextRequest) {
 
     if (upsertError) throw upsertError;
 
-    return Response.json({ ok: true, upserted: rowsToUpsert.length });
+    return Response.json({
+      ok: true,
+      upserted: rowsToUpsert.length,
+      email_filled: emailFilled,
+      missing_email: missingEmail,
+      default_timezone: DEFAULT_PHOTO_REVIEW_TIMEZONE,
+    });
   } catch (error) {
     return routeError(error);
   }

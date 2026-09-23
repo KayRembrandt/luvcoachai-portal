@@ -1,0 +1,850 @@
+/* Library Review only. Existing portal/global and coaching styles stay intact.
+ * Approved brand colors: Warm Cream guidebook, pages 8–10.
+ * Coral/indigo fills below are mixes, not additional named brand colors.
+ * This file contains no external fonts, images or network requests.
+ */
+
+.page {
+  --library-blue: var(--brand-twilight-blue, #333092);
+  --library-cream: var(--brand-warm-cream, #F3EDE9);
+  --library-linen: var(--brand-linen, #E4DCD6);
+  --library-text: var(--brand-slate, #4A4668);
+  --library-ink: var(--brand-charcoal, #162731);
+  --library-indigo: var(--brand-electric-indigo, #504ea4);
+  --library-coral: #FBAF5F;
+  --library-sage: #8BAEA1;
+  --library-green: var(--brand-evergreen-reserve, #2D6B52);
+  --library-line: color-mix(in srgb, var(--library-indigo) 66%, var(--library-cream));
+  --library-shadow: 0 3px 12px rgb(15 0 78 / 5%);
+  width: 100%;
+  min-width: 0;
+  color: var(--library-text);
+  font-family: var(--portal-font-body, Arial, sans-serif);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  container-type: inline-size;
+}
+
+.page *,
+.page *::before,
+.page *::after {
+  box-sizing: border-box;
+}
+
+.page button,
+.page input,
+.page select,
+.page textarea {
+  font-family: inherit;
+}
+
+.page button {
+  cursor: pointer;
+}
+
+.page button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.page button:focus-visible,
+.page input:focus-visible,
+.page select:focus-visible,
+.page textarea:focus-visible {
+  outline: 3px solid var(--library-blue);
+  outline-offset: 3px;
+}
+
+.page svg {
+  flex: 0 0 auto;
+}
+
+/* Compact title: the lesson editor, not a banner, gets most of the page. */
+.pageHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+  margin-bottom: 1.5rem;
+  padding: 0.4rem 0.15rem 0.25rem;
+}
+
+.headingGroup {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.headingIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 3.5rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  border: 1px solid var(--library-line);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--library-indigo) 30%, var(--library-cream));
+  color: var(--library-blue);
+  box-shadow: var(--library-shadow);
+}
+
+.headingIcon svg {
+  width: 1.8rem;
+  height: 1.8rem;
+}
+
+.pageHeader h1 {
+  margin: 0;
+  color: var(--library-blue);
+  font-family: var(--portal-font-heading, var(--portal-font-body, Arial, sans-serif));
+  font-size: clamp(1.85rem, 2vw + 0.8rem, 2.25rem);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.pageHeader p {
+  margin: 0.4rem 0 0;
+  font-size: 1.125rem;
+}
+
+.librarySummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem 0.9rem;
+  max-width: 26rem;
+  font-size: 1rem;
+}
+
+.librarySummary > span:not(.brandNote) {
+  padding: 0.3rem 0.75rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--library-line);
+  background: var(--library-cream);
+}
+
+.brandNote {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  width: 100%;
+  font-style: italic;
+}
+
+.brandNote svg {
+  width: 1.1rem;
+  color: var(--brand-ember-flame, #F58025);
+}
+
+/* No 70vh cage and no nested maximum-width shell. The existing shell sets width. */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+  min-width: 0;
+}
+
+.listPanel,
+.editorPanel {
+  min-width: 0;
+  border: 1px solid var(--library-line);
+  border-radius: 1rem;
+  background: var(--library-cream);
+  box-shadow: var(--library-shadow);
+}
+
+.panelHeading {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 1.1rem 1.15rem;
+  border-bottom: 1px solid var(--library-line);
+  border-radius: 1rem 1rem 0 0;
+}
+
+.panelHeading[data-tone="indigo"] {
+  background: color-mix(in srgb, var(--library-indigo) 55%, var(--library-cream));
+}
+
+.panelHeading[data-tone="coral"] {
+  background: color-mix(in srgb, var(--library-coral) 60%, var(--library-cream));
+}
+
+.stepNumber {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
+  background: var(--library-cream);
+  color: var(--library-blue);
+  border: 1px solid var(--library-line);
+  border-radius: 50%;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.panelHeading h2 {
+  margin: 0;
+  color: var(--library-blue);
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.panelHeading p {
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.listActions {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem 1rem 0.8rem;
+}
+
+.primaryButton,
+.secondaryButton,
+.textButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.85rem;
+  max-width: 100%;
+  padding: 0.65rem 0.95rem;
+  border: 1px solid var(--library-line);
+  border-radius: 0.65rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.primaryButton {
+  color: var(--library-cream);
+  background: var(--library-blue);
+  border-color: var(--library-blue);
+  box-shadow: 0 3px 6px rgb(15 0 78 / 12%);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--brand-midnight-violet, #0F004E);
+}
+
+.secondaryButton {
+  color: var(--library-blue);
+  background: var(--library-cream);
+  border-color: var(--library-indigo);
+}
+
+.secondaryButton:hover:not(:disabled),
+.textButton:hover:not(:disabled) {
+  background: var(--brand-parchment, #F7EED4);
+}
+
+.textButton {
+  color: var(--library-blue);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.plus {
+  font-size: 1.4rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.categoryList,
+.lessonList {
+  list-style: none;
+  padding: 0.3rem 0.7rem 0.85rem;
+  margin: 0;
+  max-height: 24rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--library-indigo) var(--library-cream);
+}
+
+.categoryList li,
+.lessonList li {
+  margin: 0 0 0.35rem;
+  padding: 0;
+}
+
+.categoryButton {
+  display: grid;
+  grid-template-columns: 1.1rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 3.35rem;
+  padding: 0.65rem 0.7rem;
+  color: var(--library-text);
+  background: var(--library-cream);
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  font-size: 1rem;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.categoryButton > svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--library-blue);
+}
+
+.categoryName {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.categoryList li:nth-child(even) .categoryButton,
+.lessonList li:nth-child(even) .lessonButton {
+  background: color-mix(in srgb, var(--library-coral) 30%, var(--library-cream));
+}
+
+.categoryButton:hover:not(:disabled),
+.lessonButton:hover:not(:disabled) {
+  border-color: var(--library-indigo);
+}
+
+.categoryList .categoryButton[data-active="true"] {
+  background: var(--library-blue);
+  color: var(--library-cream);
+  box-shadow: 0 3px 7px rgb(15 0 78 / 10%);
+}
+
+.categoryButton[data-active="true"] > svg {
+  color: var(--library-cream);
+}
+
+.count {
+  min-width: 1.8rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.45rem;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--library-indigo) 20%, var(--library-cream));
+  color: var(--library-blue);
+}
+
+.categoryButton[data-active="true"] .count {
+  background: var(--library-cream);
+}
+
+.panelFootnote {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--library-line);
+}
+
+.panelFootnote svg {
+  width: 1.05rem;
+  margin-top: 0.2rem;
+}
+
+.panelFootnote p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.lessonButton {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.95rem;
+  border: 1px solid var(--library-line);
+  border-radius: 0.75rem;
+  background: var(--library-cream);
+  color: var(--library-text);
+  font-size: 1rem;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.lessonList .lessonButton[data-active="true"] {
+  border-color: var(--library-blue);
+  background: color-mix(in srgb, var(--library-indigo) 20%, var(--library-cream));
+  box-shadow: inset 3px 0 0 var(--library-blue);
+}
+
+.lessonTopline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.lessonOrder {
+  color: var(--library-blue);
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  display: inline-flex;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--library-line);
+  border-radius: 0.4rem;
+  color: var(--library-text);
+  background: var(--library-cream);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.status[data-published="true"] {
+  color: var(--library-green);
+  border-color: color-mix(in srgb, var(--library-green) 30%, var(--library-cream));
+  background: color-mix(in srgb, var(--library-sage) 15%, var(--library-cream));
+}
+
+.lessonTitle {
+  color: var(--library-blue);
+  font-size: 1.125rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.lessonOpen {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--library-blue);
+  font-size: 1rem;
+}
+
+.lessonOpen svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.smallEmpty {
+  padding: 1.35rem 1.15rem 2rem;
+  color: var(--library-text);
+}
+
+.smallEmpty > svg {
+  width: 2.2rem;
+  height: 2.2rem;
+  color: var(--library-indigo);
+}
+
+.smallEmpty p {
+  margin: 0.75rem 0 0;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+/* The editable category fields now use this wide pane, just like lessons. */
+.editorPanel {
+  container-type: inline-size;
+  scroll-margin-top: 1rem;
+}
+
+.editorHeading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem 1.35rem;
+  border-radius: 1rem 1rem 0 0;
+  border-bottom: 1px solid var(--library-line);
+  background: color-mix(in srgb, var(--library-indigo) 30%, var(--library-cream));
+}
+
+.editorTitleGroup {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.editorTitleGroup > svg {
+  color: var(--library-blue);
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.15rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: var(--library-text);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.editorTitleGroup h2 {
+  margin: 0;
+  color: var(--library-blue);
+  font-size: 1.4rem;
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.editorFields {
+  display: grid;
+  gap: 1.25rem;
+  padding: 1.4rem;
+  margin: 0;
+  min-width: 0;
+  border: 0;
+}
+
+.field {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  align-content: start;
+}
+
+.field > label {
+  color: var(--library-blue);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.page .control {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 2.95rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--library-indigo);
+  border-radius: 0.55rem;
+  background: var(--library-cream);
+  color: var(--library-ink);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  box-shadow: inset 0 1px 3px rgb(15 0 78 / 3%);
+}
+
+.page textarea.control {
+  resize: vertical;
+  min-height: 7rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.page .control::placeholder {
+  color: var(--library-text);
+  opacity: 0.9;
+}
+
+.page .control:focus {
+  border-color: var(--library-blue);
+}
+
+.page .control:disabled {
+  opacity: 0.75;
+}
+
+.fieldHint {
+  margin: 0;
+  color: var(--library-text);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.fieldRow,
+.fieldRowThree {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.page textarea.writingArea {
+  min-height: 24rem;
+  line-height: 1.8;
+}
+
+.subsectionHeading {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.5rem 0 0;
+  padding: 1rem 0 0;
+  border-top: 1px solid var(--library-line);
+  color: var(--library-blue);
+}
+
+.subsectionHeading h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 750;
+}
+
+.publishSetting {
+  padding: 1rem;
+  border: 1px solid var(--library-line);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--library-sage) 10%, var(--library-cream));
+}
+
+.publishSetting label {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.25rem;
+  color: var(--library-blue);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.publishSetting input {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 1.25rem;
+  accent-color: var(--library-blue);
+}
+
+.publishSetting p {
+  margin: 0.35rem 0 0;
+  font-size: 1rem;
+}
+
+.editorFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid var(--library-line);
+  padding-top: 1.2rem;
+}
+
+.editorFooter p {
+  flex: 1 1 12rem;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+/* Quiet, rendered decorative touches rather than a huge empty rectangle. */
+.emptyEditor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 28rem;
+  padding: clamp(1.5rem, 4vw, 3rem);
+  text-align: center;
+}
+
+.emptyEditor h2 {
+  margin: 0 0 0.75rem;
+  color: var(--library-blue);
+  font-family: var(--portal-font-heading, var(--portal-font-body, Arial, sans-serif));
+  font-size: 1.8rem;
+  line-height: 1.3;
+}
+
+.emptyEditor > p:not(.eyebrow) {
+  max-width: 36ch;
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.7;
+}
+
+.emptyIllustration {
+  position: relative;
+  width: 6.5rem;
+  height: 6.5rem;
+  margin-bottom: 1.8rem;
+}
+
+.bookShadow {
+  position: absolute;
+  inset: 0.3rem;
+  transform: rotate(-12deg);
+  background: color-mix(in srgb, var(--library-coral) 22%, var(--library-cream));
+  border-radius: 1.35rem;
+}
+
+.bookTile {
+  position: absolute;
+  inset: 0.15rem;
+  display: grid;
+  place-items: center;
+  border-radius: 1.3rem;
+  border: 1px solid var(--library-line);
+  color: var(--library-blue);
+  background: color-mix(in srgb, var(--library-indigo) 15%, var(--library-cream));
+}
+
+.bookTile svg {
+  width: 3.2rem;
+  height: 3.2rem;
+  stroke-width: 1.25;
+}
+
+.littleHeart {
+  position: absolute;
+  right: -0.5rem;
+  bottom: -0.3rem;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--library-line);
+  border-radius: 50%;
+  background: var(--brand-parchment, #F7EED4);
+  color: var(--library-blue);
+}
+
+.emptySteps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem 1rem;
+  padding: 1.5rem 0;
+  font-size: 1rem;
+}
+
+.emptySteps span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.emptySteps b {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  font-size: 1rem;
+  background: color-mix(in srgb, var(--library-indigo) 12%, var(--library-cream));
+  color: var(--library-blue);
+}
+
+.privacyNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  max-width: 31rem;
+  padding: 1rem;
+  border: 1px solid var(--library-line);
+  border-radius: 0.7rem;
+  background: var(--brand-parchment, #F7EED4);
+  text-align: left;
+}
+
+.privacyNote svg {
+  color: var(--library-blue);
+  margin-top: 0.1rem;
+}
+
+.privacyNote p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The outer workspace responds to actual available width, including zoom.
+ * Form rows respond to the editor's width, not the browser's width. */
+@container (min-width: 38rem) {
+  .workspace {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .editorPanel {
+    grid-column: 1 / -1;
+  }
+}
+
+@container (min-width: 72rem) {
+  .workspace {
+    grid-template-columns: 16.5rem 18rem minmax(0, 1fr);
+  }
+
+  .editorPanel {
+    grid-column: auto;
+  }
+
+  .categoryList,
+  .lessonList {
+    max-height: 36rem;
+  }
+}
+
+@container (min-width: 28rem) {
+  .fieldRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 34rem) {
+  .fieldRowThree {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .pageHeader {
+    gap: 1rem;
+  }
+
+  .librarySummary,
+  .brandNote {
+    justify-content: flex-start;
+  }
+
+  .editorHeading,
+  .editorFields {
+    padding: 1rem;
+  }
+
+  .emptyEditor {
+    min-height: 24rem;
+    padding: 1.5rem 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .primaryButton,
+  .secondaryButton,
+  .categoryButton,
+  .lessonButton {
+    transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  }
+}

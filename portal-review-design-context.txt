@@ -1,0 +1,3693 @@
+
+
+===== src/app/users/search/page.tsx =====
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+
+import { PageShell } from "@/components/ui/PageShell";
+import { Panel } from "@/components/Panel";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
+import { FormRow } from "@/components/ui/FormRow";
+import { FormActions } from "@/components/ui/FormActions";
+
+type ResultRow = {
+  id: string;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  screen_name: string | null;
+  updated_at?: string | null;
+};
+
+export default function UserSearchPage() {
+  const [email, setEmail] = useState("");
+  const [first, setFirst] = useState("");
+  const [last, setLast] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [results, setResults] = useState<ResultRow[]>([]);
+
+  const canSearch = email.trim().length > 3 || last.trim().length >= 2; // staff rule
+
+  async function onSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSearch) return;
+
+    setLoading(true);
+    setError(null);
+    setResults([]);
+
+    try {
+      const res = await fetch("/api/user-search", {
+        
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          first_name: first.trim(),
+          last_name: last.trim(),
+        }),
+      });
+
+      const json = await res.json();
+
+console.log("user-search JSON:", json);
+      if (!res.ok) {
+        throw new Error(json?.error || "Search failed");
+      }
+
+      const nextResults = json.results ?? json.users ?? json.data ?? [];
+      setResults(nextResults);
+
+    } catch (err: any) {
+      setError(err.message ?? "Search failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function onClear() {
+    setEmail("");
+    setFirst("");
+    setLast("");
+    setResults([]);
+    setError(null);
+  }
+
+  return (
+    <PageShell
+      title="User Search"
+      subtitle="Search by email or by real first/last name. Screen name is visible in User 360 but not searchable."
+    >
+      <div className="space-y-6">
+        <Panel>
+          <form onSubmit={onSearch} className="space-y-4">
+            <Field label="Email" hint="Best match when available.">
+              <Input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                type="email"
+                placeholder="name@example.com"
+              />
+            </Field>
+
+            <div className="flex items-center gap-3 text-xs opacity-70">
+              <div className="h-px flex-1 bg-[var(--panel-border)]" />
+              <span>or</span>
+              <div className="h-px flex-1 bg-[var(--panel-border)]" />
+            </div>
+
+            <FormRow className="md:grid-cols-2">
+              <Field label="First name (optional)">
+                <Input
+                  value={first}
+                  onChange={(e) => setFirst(e.target.value)}
+                  type="text"
+                  placeholder="First name"
+                />
+              </Field>
+
+              <Field
+                label="Last name *"
+                hint="Required if email is not provided."
+              >
+                <Input
+                  value={last}
+                  onChange={(e) => setLast(e.target.value)}
+                  type="text"
+                  placeholder="Last name"
+                />
+              </Field>
+            </FormRow>
+
+            <FormActions className="items-center">
+              <Button type="submit" disabled={!canSearch || loading}>
+                {loading ? "Searching…" : "Search"}
+              </Button>
+
+              <Button type="button" variant="ghost" onClick={onClear}>
+                Clear
+              </Button>
+
+              <p className="ml-auto text-xs opacity-70">
+                Results limited to protect privacy.
+              </p>
+            </FormActions>
+
+            {error && (
+              <div className="rounded-lg border border-rose-300/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+                {error}
+              </div>
+            )}
+          </form>
+        </Panel>
+
+        <Panel>
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold">Results</div>
+            <div className="text-xs opacity-70">{results.length} found</div>
+          </div>
+
+          {results.length === 0 ? (
+            <div className="mt-3 text-sm opacity-80">
+              No results yet. Run a search above.
+            </div>
+          ) : (
+            <div className="mt-4 overflow-hidden rounded-lg border border-[var(--panel-border)]">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-[var(--panel-border)] bg-black/5 dark:bg-white/5">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">Name</th>
+                    <th className="px-3 py-2 font-semibold">Email</th>
+                    <th className="px-3 py-2 font-semibold">Screen name</th>
+                    <th className="px-3 py-2 font-semibold">Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((r) => (
+                    <tr key={r.id} className="border-t border-[var(--panel-border)]">
+                      <td className="px-3 py-2">
+                        <Link
+                          href={`/users/${r.id}`}
+                          className="font-semibold hover:underline"
+                        >
+                          {((r.first_name ?? "") + " " + (r.last_name ?? "")).trim() || "—"}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2 opacity-90">{r.email ?? "—"}</td>
+                      <td className="px-3 py-2 opacity-90">{r.screen_name ?? "—"}</td>
+                      <td className="px-3 py-2 opacity-70">
+                        {r.updated_at ? new Date(r.updated_at).toLocaleString() : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      </div>
+    </PageShell>
+  );
+}
+
+
+
+===== src/app/users/[id]/page.tsx =====
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { ConnectionProfileView } from "@/components/client-preview/ClientProfileView";
+import UserPendingPhotoCards, { type PendingPhoto } from "@/components/photo-review/UserPendingPhotoCards";
+import { createSupabaseServiceClient } from "@/lib/supabaseService";
+import { signProfilePhotoRows } from "@/lib/photoUrlSigning";
+import ProfileImagePreview from "@/components/ProfileImagePreview";
+
+
+import { Panel } from "@/components/Panel";
+
+
+
+
+function fmtDate(value: any) {
+  if (!value) return "—";
+  try {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return String(value);
+    return d.toISOString().slice(0, 10);
+  } catch (e) {
+    return String(value);
+  }
+}
+function fmtDateTime(value: any) {
+  if (!value) return "—";
+
+  const d = new Date(value);
+
+  if (isNaN(d.getTime())) return String(value);
+
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+
+function humanizeKey(k: string) {
+  return k.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function humanizeItemId(raw: string) {
+  const afterColon = raw.includes(":") ? raw.split(":")[1] : raw;
+  return afterColon.replace(/_/g, " ");
+}
+
+function Pill({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-800 shadow-sm">
+      {children}
+    </span>
+  );
+}
+
+function PillGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="text-[15px] font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </div>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
+  );
+}
+
+function renderItemsAsPills(value: any) {
+  // { items: [{ item_id, severity }, ...] } OR [{ item_id, severity }]
+  const itemsRaw = Array.isArray(value) ? value : value?.items;
+  if (!Array.isArray(itemsRaw) || itemsRaw.length === 0) return null;
+
+  const items = itemsRaw
+    .filter((x: any) => x && typeof x.item_id === "string")
+    .map((x: any) => ({
+      item_id: x.item_id as string,
+      severity: typeof x.severity === "string" ? x.severity : null,
+      group: (x.item_id as string).includes(":")
+        ? (x.item_id as string).split(":")[0]
+        : "items",
+    }));
+
+  const groups = new Map<string, { item_id: string; severity: string | null }[]>();
+  for (const it of items) {
+    if (!groups.has(it.group)) groups.set(it.group, []);
+    groups.get(it.group)!.push({ item_id: it.item_id, severity: it.severity });
+  }
+
+
+  return (
+    <div className="space-y-5">
+      {Array.from(groups.entries()).map(([groupName, groupItems]) => (
+        <PillGroup key={groupName} title={humanizeKey(groupName)}>
+          {groupItems.map((it) => (
+            <Pill key={it.item_id}>
+              {humanizeItemId(it.item_id)}
+              {it.severity ? (
+                <span className="ml-2 text-[10px] text-slate-500">• {it.severity}</span>
+              ) : null}
+            </Pill>
+          ))}
+        </PillGroup>
+      ))}
+    </div>
+  );
+}
+
+function PhotosCard({
+  heroUrl,
+  heroPhotoId,
+}: {
+  heroUrl: string | null;
+  heroPhotoId: string | null;
+}) {
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <div className="text-sm font-semibold text-slate-800 mb-2">
+        Profile photo
+      </div>
+
+      <div className="aspect-square w-full overflow-hidden rounded-2xl bg-slate-100 border border-slate-200">
+        <ProfileImagePreview
+          src={heroUrl}
+          photoId={heroPhotoId}
+          alt="Profile photo"
+          className="h-full w-full object-cover"
+          fallbackClassName="flex h-full w-full items-center justify-center text-slate-400 text-sm"
+          meta={{ surface: "user360_hero" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function renderObjectOfArraysAsPills(value: any) {
+  // match_preferences often looks like:
+  // { answers: { pace: [...], faith: [...] } } OR { pace: [...], faith: [...] }
+  const obj =
+    value?.answers && typeof value.answers === "object" ? value.answers : value;
+
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
+
+  const entries = Object.entries(obj).filter(
+    ([, v]) => Array.isArray(v) && v.length > 0
+  );
+
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="space-y-5">
+      {entries.map(([k, arr]) => (
+        <PillGroup key={k} title={humanizeKey(k)}>
+          {(arr as any[]).map((raw, idx) => (
+            <Pill key={`${k}-${idx}-${String(raw)}`}>
+              {String(raw).replace(/_/g, " ")}
+            </Pill>
+          ))}
+        </PillGroup>
+      ))}
+    </div>
+  );
+}
+// If your photos query returns rows like: { url: string | null, ... }
+
+
+function ValueBlock({ value }: { value: any }) {
+  const empty = value === null || value === undefined || value === "";
+  if (empty) return <div className="text-lg text-slate-400">—</div>;
+
+  // ✅ match_preferences style
+   // ✅ match_preferences style (dial_in.answers)
+  const matchPills = renderMatchPreferencesAsPills(value);
+  if (matchPills) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        {matchPills}
+      </div>
+    );
+  }
+
+// ✅ match_preferences (dial_in.answers) → grouped chips
+function renderMatchPreferencesAsPills(value: any) {
+  if (!value || typeof value !== "object") return null;
+
+  const answers = value?.dial_in?.answers;
+  if (!answers || typeof answers !== "object") return null;
+
+  const groups = Object.entries(answers)
+    .map(([k, arr]) => [k, Array.isArray(arr) ? arr : []] as const)
+    .filter(([, arr]) => arr.length > 0);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="space-y-4">
+      {groups.map(([k, arr]) => (
+        <div key={k}>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+            {humanizeKey(k)}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {arr.map((v: any) => (
+              <Pill key={`${k}:${String(v)}`}>{humanizeKey(String(v))}</Pill>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+function renderNonNegotiablesAsPills(value: any) {
+  const keys = value?.selected_keys;
+  if (!Array.isArray(keys) || keys.length === 0) return null;
+
+  return (
+    <PillGroup title="Selected keys">
+      {keys.map((k: string) => (
+        <Pill key={k}>{humanizeKey(String(k))}</Pill>
+      ))}
+    </PillGroup>
+  );
+}
+
+
+  // ✅ compatibility_alignments style
+  const itemPills = renderItemsAsPills(value);
+  if (itemPills) {
+    const count = Array.isArray(value) ? value.length : Array.isArray(value?.items) ? value.items.length : 0;
+    const huge = count > 18;
+
+    return huge ? (
+      <details className="rounded-2xl border border-slate-400 bg-slate-50 p-2">
+        <summary className="cursor-pointer text-sm font-medium text-slate-700">
+          View {count} items
+        </summary>
+        <div className="mt-4">{itemPills}</div>
+      </details>
+    ) : (
+      //empty box -null field in server
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2">
+        {itemPills}
+      </div>
+    );
+  }
+// ✅ non_negotiables style
+const nn = renderNonNegotiablesAsPills(value);
+if (nn) {
+  return <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">{nn}</div>;
+}
+
+  // Default objects/arrays as pretty JSON (still padded)
+  const isObject = typeof value === "object" && value !== null;
+  if (isObject) {
+    const text = JSON.stringify(value, null, 2);
+    const big = text.length > 900;
+
+    return big ? (
+      <details className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <summary className="cursor-pointer text-sm font-medium text-slate-700">
+          View details
+        </summary>
+        <pre className="mt-3 whitespace-pre-wrap break-words text-xs text-slate-700 leading-relaxed">
+          {text}
+        </pre>
+      </details>
+    ) : (
+      <pre className="whitespace-pre-wrap break-words rounded-2xl bg-slate-50 border border-slate-200 p-4 text-xs text-slate-800 leading-relaxed">
+        {text}
+      </pre>
+    );
+  }
+  // Strings
+  const text = String(value);
+
+  // ✅ If the value looks like an image URL, render a *small thumbnail* + link
+  const isImageUrl =
+    /^https?:\/\/\S+\.(png|jpg|jpeg|webp|gif)(\?\S*)?$/i.test(text);
+if (isImageUrl) {
+  return (
+    <a
+      href={text}
+      target="_blank"
+      rel="noreferrer"
+      className="text-xs text-blue-600 underline break-all"
+    >
+      Open image
+    </a>
+  );
+}
+
+  const long = text.length > 400;
+
+return (
+  //relationship status fields 
+  <div className="rounded-2xl border border-slate-200 bg-white p-2 text-[21px] text-slate-900 leading-relaxed break-words">
+    {text}
+  </div>
+);
+
+}
+
+function Row({ label, value }: { label: string; value: any }) {
+  return (
+    <div className="grid grid-cols-12 gap-6 py-3 border-b border-slate-200 last:border-b-0 items-center">
+
+      <div className="col-span-12 md:col-span-4">
+        <div className="text-[15px] font-medium text-slate-600">
+  {label
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())}
+</div>
+
+      </div>
+      <div className="col-span-12 md:col-span-8">
+        <ValueBlock value={value} />
+      </div>
+    </div>
+  );
+}
+
+function Card({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-b from-white to-slate-50">
+        <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>
+      </div>
+      <div className="px-6">{children}</div>
+    </div>
+  );
+}
+
+function TabNav({ userId, active }: { userId: string; active: string }) {
+  const tabs = [
+    { key: "overview", label: "Overview" },
+    { key: "profile", label: "Profile Parts" },
+    { key: "story", label: "My Story" },
+    { key: "photos", label: "Photos" }, 
+    { key: "onboarding", label: "Onboarding" },
+    { key: "raw", label: "Raw" },
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
+      {tabs.map((t) => {
+        const isActive = t.key === active;
+        return (
+          <a
+            key={t.key}
+            href={`/users/${userId}?tab=${t.key}`}
+            className={[
+              "rounded-full px-4 py-2 text-sm font-medium border",
+              isActive
+                ? "bg-slate-900 text-white border-slate-900"
+                : "bg-white text-slate-800 border-slate-200 hover:bg-slate-50",
+            ].join(" ")}
+          >
+            {t.label}
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+export default async function User360Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ tab?: string }>;
+}) {
+  const { id } = await params;
+  const sp = (await searchParams) ?? {};
+  const tab = sp.tab ?? "overview";
+
+  const supabase = createSupabaseServiceClient();
+    
+
+
+type ProfileRow = Record<string, any>;
+type UserPhotoRow = {
+  id: string;
+  user_id: string | null;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  is_primary: boolean | null;
+  sort_order: number | null;
+  review_status: string | null;
+  created_at: string | null;
+  photo_kind: string | null;
+  staff_notes: string | null;
+  admin_notes: string | null;
+};
+
+console.log("USER360 USING SERVICE CLIENT");
+console.log("USER360 env", {
+  url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+  id,
+});
+
+const { data: probe, error: probeError } = await supabase
+  .from("profiles")
+  .select("id,email,screen_name")
+  .eq("id", id);
+
+console.log("USER360 probe result", { probeError, probe });
+
+const { data: profile, error: profileError } = await supabase
+  .from("profiles")
+  .select("*")
+  .eq("id", id)
+  .maybeSingle();
+
+if (profileError) {
+  return <pre>{profileError.message}</pre>;
+}
+
+if (!profile) {
+  return (
+    <div className="rounded-2xl border bg-white p-6">
+      No profile returned for this user.
+    </div>
+  );
+}
+
+const p = profile as ProfileRow;
+
+// ✅ 1) Fetch ALL photos for this user (approved + pending + etc.)
+const { data: photoRows, error: photosError } = await supabase
+  .from("profile_photos")
+  .select("id, user_id, storage_bucket, storage_path, is_primary, sort_order, review_status, created_at, photo_kind, staff_notes, admin_notes")
+  .eq("user_id", id)
+  .order("created_at", { ascending: false });
+
+const basePhotoRows = (photoRows ?? []) as UserPhotoRow[];
+
+if (photosError) console.log("USER360 photos error", photosError);
+console.log("USER360 photos rows", basePhotoRows);
+console.log("USER360 rejected count", basePhotoRows.filter((r) => r.review_status === "rejected").length);
+
+// ✅ 2) Build signed URLs for ALL rows (must happen before approvedUrls/pending cards)
+const signedPhotoRows = await signProfilePhotoRows(supabase, basePhotoRows);
+const signedMap: Record<string, string> = {};
+for (const row of signedPhotoRows) {
+  if (row.storage_path && row.displayUrl) signedMap[row.storage_path] = row.displayUrl;
+}
+console.log("USER360 signedMap size", Object.keys(signedMap).length);
+console.log("USER360 first paths", signedPhotoRows.slice(0, 3).map((r) => r.storage_path));
+// ✅ 3) Split rows by review status
+const approvedRows = signedPhotoRows.filter(
+  (r) => r.review_status === "approved"
+);
+const pendingRows = signedPhotoRows.filter(
+  (r) => r.review_status === "pending"
+);
+const rejectedRows = signedPhotoRows.filter(
+  (r) => r.review_status === "rejected"
+);
+// ✅ 4) Optional: stable ordering for approved
+approvedRows.sort((a, b) => {
+  if (!!a.is_primary !== !!b.is_primary) return a.is_primary ? -1 : 1;
+  const ao = a.sort_order ?? 999999;
+  const bo = b.sort_order ?? 999999;
+  if (ao !== bo) return ao - bo;
+  return String(b.created_at).localeCompare(String(a.created_at));
+});
+
+const approvedPhotoViews = approvedRows.map((r) => ({
+  id: r.id as string,
+  url: r.displayUrl ?? null,
+  fullUrl: r.fallbackUrl ?? r.imageUrl ?? r.displayUrl ?? null,
+  storage_bucket: r.storage_bucket ?? null,
+  storage_path: r.storage_path ?? null,
+  thumbPath: r.thumbPath ?? null,
+  photoUrlError: r.photoUrlError ?? null,
+}));
+  
+// 6) HERO photo for the left sidebar (approved only; prefer identity/selfie)
+const identityApproved = approvedRows.filter(
+  (r) =>
+    typeof r.storage_path === "string" && r.storage_path.includes("/identity/")
+);
+
+const heroRow =
+  identityApproved.find((r) => r.is_primary) ??
+  identityApproved[0] ??
+  approvedRows.find((r) => r.is_primary) ??
+  approvedRows[0] ??
+  null;
+
+const heroUrl =
+  heroRow?.storage_path ? signedMap?.[heroRow.storage_path] ?? null : null;
+const heroPhotoId = heroRow?.id ?? null;
+
+console.log("USER360 heroUrl", heroUrl);
+
+// ✅ 6) Pending cards include signed_url too (if you use them)
+const pendingCardPhotos = pendingRows
+  .map((r): PendingPhoto | null => {
+    const bucket = typeof r?.storage_bucket === "string" ? r.storage_bucket : null;
+    const path = typeof r?.storage_path === "string" ? r.storage_path : null;
+    if (!bucket || !path) return null;
+
+ return {
+  id: r.id as string,
+  user_id: id,
+  storage_bucket: bucket,
+  storage_path: path,
+  thumbPath: r.thumbPath ?? null,
+  signed_url: r.displayUrl ?? null,
+  displayUrl: r.displayUrl ?? null,
+  imageUrl: r.imageUrl ?? null,
+  fallbackUrl: r.fallbackUrl ?? null,
+  photoUrlError: r.photoUrlError ?? null,
+  review_status: String(r.review_status ?? "pending"),
+  photo_kind: r.photo_kind ?? null,
+  kind: r.photo_kind ?? null,
+};
+  })
+  .filter((photo): photo is PendingPhoto => photo !== null);
+  
+    const rejectedCardPhotos = rejectedRows
+  .map((r): PendingPhoto | null => {
+    const bucket = typeof r?.storage_bucket === "string" ? r.storage_bucket : null;
+    const path = typeof r?.storage_path === "string" ? r.storage_path : null;
+    if (!path) return null;
+
+    return {
+  id: r.id as string,
+  user_id: id,
+  storage_bucket: bucket,
+  storage_path: path,
+  thumbPath: r.thumbPath ?? null,
+  signed_url: r.displayUrl ?? null,
+  displayUrl: r.displayUrl ?? null,
+  imageUrl: r.imageUrl ?? null,
+  fallbackUrl: r.fallbackUrl ?? null,
+  photoUrlError: r.photoUrlError ?? null,
+  review_status: "rejected",
+  staff_notes: r.staff_notes ?? null,
+  admin_notes: r.admin_notes ?? null,
+};
+  })
+  .filter((photo): photo is PendingPhoto => photo !== null);
+
+
+  console.log("USER360 rejectedCardPhotos length", rejectedCardPhotos.length);
+console.log("USER360 rejectedCardPhotos sample", rejectedCardPhotos[0]);
+    const displayName =
+  p.preferred_name ??
+  p.display_name ??
+  p.real_name ??
+  p.screen_name ??
+  "User";
+
+  return (
+    <Panel>
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* LEFT SIDEBAR */}
+          <aside className="lg:col-span-4">
+            <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 lg:sticky lg:top-6 space-y-5">
+              <div className="flex flex-col items-center gap-3">
+              <div className="h-124 w-84 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden">
+                 <PhotosCard heroUrl={heroUrl} heroPhotoId={heroPhotoId} />
+                </div>
+                
+                <div className="min-w-0">
+                  <div className="text-lg font-semibold text-slate-900 truncate">
+                    {displayName}
+                  </div>
+                  <div className="text-med text-slate-500 break-words">ID {p.id}</div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <div className="text-[15px] font-semibold uppercase tracking-wide text-slate-500">
+                    Contact
+                  </div>
+                   </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <span className="text-[15px] text-slate-500">Email - </span>
+                  <span className="mt-1 text-[15px] text-slate-900 break-words">
+                    {p.email ?? "—"}
+                  </span>
+                   </div>
+                   <div className="text-sm text-slate-600 space-y-1 mt-2">
+  <div className="flex items-center gap-2">
+    <span className="text-slate-500">Email notifications:</span>
+    <span className="font-medium text-slate-900">
+      {p.notify_message_email ? "On" : "Off"}
+    </span>
+  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <span className="text-[15px] text-slate-500">Phone - </span>
+                  <span className="text-[15px] text-slate-900 break-words">
+                    {p.phone ?? "—"}
+                  </span>
+                </div>
+
+
+  <div className="flex items-center gap-2">
+    <span className="text-slate-500">SMS notifications:</span>
+    <span className="font-medium text-slate-900">
+      {p.notify_message_sms ? "On" : "Off"}
+    </span>
+  </div>
+</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <span className="text-[15px] text-slate-500">Tier - </span>
+                    <span className="text-[15px] font-semibold text-slate-900">
+                      {p.membership_tier ?? "—"}
+                    </span>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <span className="text-[15px] text-slate-500">Status - </span>
+                    <span className="text-[15px] font-semibold text-slate-900">
+                      {p.subscription_status ?? p.subscription_level ?? "—"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <span className="text-[15px] text-slate-500">Joined - </span>
+                  <span className="text-[15px] font-semibold text-slate-900">
+                    {fmtDate(p.created_at)}
+                  </span>
+                  </div>
+                <Card title="System"><div className="space-y-3">
+                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                     <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                       Created at
+                        </div>
+                         <div className="mt-1 text-[15px] font-medium text-slate-900">
+                          {fmtDateTime(p.created_at)}
+                           </div>
+                            </div>
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                 Updated at
+                                 </div>
+                                  <div className="mt-1 text-[15px] font-medium text-slate-900">
+                                     {fmtDateTime(p.updated_at)}
+                                     </div>
+                                   </div>                                    
+                                </div>
+                    </Card>
+                     </div>
+                  </div>
+              </aside>
+
+          {/* RIGHT PANEL */}
+          <main className="lg:col-span-8">
+            <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6">
+              <TabNav userId={p.id} active={tab} />
+
+              <div className="mt-4 space-y-3">
+                {tab === "overview" && (
+                  <>
+                    <Card title="Name">
+                      <Row label="screen_name" value={p.screen_name} />
+                      <Row label="display_name" value={p.display_name} />
+                      <Row label="legal_ first & last_name" value={[ p.legal_first_name , p.legal_last_name] .filter(Boolean)
+                              .join(", ")} />
+                    </Card>
+
+                    <Card title="Subscription">
+                      
+                      <Row label="membership_tier - Controls Library Filtering" value={p.membership_tier} />
+                      <Row label="subscription_level - Reflects Membership Investment" value={p.subscription_level} />
+                      <Row label="subscription_status" value={p.subscription_status} />
+                      <Row label="Paid Membership Started" value={fmtDateTime(p.membership_started_at)} />
+                    </Card>
+
+                    <Card title="Details">
+                      <Row label="age" value={p.age} />
+                      <Row label="height" value={p.height} />
+                      <Row label="pronouns" value={p.pronouns} />
+                      <Row label="gender_identity" value={p.gender_identity} />
+                      <Row label="sexual_orientation" value={p.sexual_orientation} />
+                    </Card>
+
+                      <Card title="Home location">
+                        <Row label="Address" value={[   p.home_city,   p.home_state,   p.home_postal_code ]
+                          .filter(Boolean)
+                              .join(", ")}
+                              />                   
+                      <Row label="home_country" value={p.home_country} />                  
+                      <Row label="home_latitude" value={p.home_latitude} />
+                      <Row label="home_longitude" value={p.home_longitude} />
+                      <Row label="search_radius_km" value={p.search_radius_km} />
+                       <Row label="hometown" value={p.hometown} />
+                    </Card>
+                  </>
+                )}
+
+                {tab === "profile" && (
+                  <>
+                    <Card title="Profile text">
+                      <Row label="bio" value={p.bio} />
+                      <Row label="about" value={p.about} />
+                      <Row label="greeting" value={p.greeting} />
+                    </Card>
+                  </>
+                )}
+
+                {tab === "story" && (
+                  <>
+                    <Card title="My Story">
+                      <Row label="relationship_status" value={p.relationship_status} />
+                      <Row label="seeking_genders" value={p.seeking_genders} />
+                      <Row label="looking_for_age_min" value={p.looking_for_age_min} />
+                      <Row label="looking_for_age_max" value={p.looking_for_age_max} />
+                      
+                    </Card>
+
+                    <Card title="Compatibility alignments">
+                      <Row label="compatibility_alignments" value={p.compatibility_alignments} />
+                    </Card>
+
+                    <Card title="Match preferences">
+                      <Row label="match_preferences" value={p.match_preferences} />
+                      <Row label="non_negotiables" value={p.non_negotiables} />
+                    </Card>
+
+                    <Card title="Connections">
+                      <Row label="is_active_for_connections" value={p.is_active_for_connections} />
+                    </Card>
+                  </>
+                )}
+
+                {tab === "photos" && (
+
+                <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+  <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50">
+    <div className="text-base font-semibold text-slate-900">Photos</div>
+    <div className="text-sm text-slate-500">
+     {approvedRows.length + pendingCardPhotos.length
+  ? `${approvedRows.length} approved • ${pendingCardPhotos.length} pending`
+  : "No photos"}
+    </div>
+  </div>
+
+  <div className="p-6 space-y-8">
+    {/* Approved */}
+    <div>
+      <div className="text-sm font-semibold text-slate-800 mb-3">Approved</div>
+      {approvedPhotoViews.length === 0 ? (
+        <div className="text-sm text-slate-500">No approved photos on file.</div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {approvedPhotoViews.map((photo, i) => (
+            <a
+              key={`ap-${photo.id}-${i}`}
+              href={photo.fullUrl ?? photo.url ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="group block rounded-2xl overflow-hidden border border-slate-200 bg-slate-50"
+              title="Open full size"
+            >
+              <ProfileImagePreview
+                src={photo.url}
+                fallbackSrc={photo.fullUrl}
+                photoId={photo.id}
+                alt={`Approved photo ${i + 1}`}
+                className="h-40 w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+                fallbackClassName="flex h-40 w-full items-center justify-center text-sm text-slate-500"
+                meta={{
+                  surface: "user360_approved_grid",
+                  photoId: photo.id,
+                  storageBucket: photo.storage_bucket,
+                  storagePath: photo.storage_path,
+                  thumbPath: photo.thumbPath,
+                  photoUrlError: photo.photoUrlError,
+                }}
+              />
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+
+   {/* Pending */}
+<div>
+  <div className="text-sm font-semibold text-slate-800 mb-3">
+    Pending review
+  </div>
+
+  {pendingCardPhotos.length === 0 ? (
+    <div className="text-sm text-slate-500">No pending photos.</div>
+  ) : (
+    <UserPendingPhotoCards photos={pendingCardPhotos} />
+  )}
+
+</div>
+{/* ✅ Rejected photos */}
+<div className="mt-6">
+  <div className="mb-2 text-sm font-semibold text-slate-700">
+    Rejected ({rejectedCardPhotos.length})
+  </div>
+
+  {rejectedCardPhotos.length ? (
+    <UserPendingPhotoCards photos={rejectedCardPhotos} />
+  ) : (
+    <div className="text-sm text-slate-500">No rejected photos.</div>
+  )}
+</div>
+
+    </div>
+  </div>
+
+                )}
+                {tab === "onboarding" && (
+                  <>
+                    <Card title="Onboarding">
+                      <Row label="onboarding_step" value={p.onboarding_step} />
+                      <Row label="onboarding_completed" value={p.onboarding_completed} />
+                      <Row label="onboarding_updated_at" value={p.onboarding_updated_at} />
+                      <Row label="mira_profile_insight" value={p.mira_profile_insight} />
+                      <Row label="time_sentence" value={p.time_sentence} />
+                      <Row label="mira_reflection" value={p.mira_reflection} />
+                    </Card>
+                  </>
+                )}
+
+                {tab === "raw" && (
+                  <Card title="Raw profile row">
+                    <Row label="profiles.*" value={p} />
+                  </Card>
+                )}
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+    </Panel>
+  );
+}
+
+
+
+===== src/app/users/preview/page.tsx =====
+"use client";
+
+import { ConnectionProfileView } from "@/components/client-preview/ClientProfileView";
+import { Panel } from "@/components/Panel";
+import { PageShell } from "@/components/ui/PageShell";
+import { supabaseBrowser as supabase } from "@/lib/supabaseBrowser";
+
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+
+type ConnectionProfile = Parameters<typeof ConnectionProfileView>[0]["profile"];
+
+export default function MyStoryPreviewPage() {
+  const router = useRouter();
+  
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<ConnectionProfile | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const { data: auth, error: authErr } = await supabase.auth.getUser();
+        if (authErr) throw authErr;
+
+        const userId = auth?.user?.id;
+
+        if (!userId) {
+          setError("You must be logged in to preview your profile.");
+          return;
+        }
+
+        const { data, error: profileError } = await supabase
+          .from("profiles")
+          .select(
+            `
+            id,
+            screen_name,
+            greeting,
+            bio,
+            about,
+            date_of_birth,
+            city,
+            region,
+            hometown,
+            gender_identity,
+            sexual_orientation,
+            pronouns,
+            relationship_intent,
+            primary_photo_url,
+            photos,
+            interests,
+            compatibility_alignments,
+            match_preferences,  
+            mira_profile_insight
+          `
+          )
+          .eq("id", userId)
+          .maybeSingle();
+
+        if (profileError) throw profileError;
+        if (!data) {
+          setError("We couldn’t load your profile preview yet.");
+          return;
+        }
+
+        setProfile(data as ConnectionProfile);
+      } catch (e: any) {
+        console.error("Error loading My Story preview:", e);
+        setError(e?.message ?? "Something went wrong loading your preview.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [supabase]);
+
+  return (
+    <PageShell
+      label="My Story"
+      emoji="🪞"
+      title="👀 Profile Preview"
+      subtitle="This is what others will see in Connections."
+      centeredHeader
+      wide
+    >
+      <Panel>
+        <div className="max-w-5xl mx-auto space-y-6 pb-6">
+          <div>
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="rounded-full border border-[#D2D7EB] bg-white px-5 py-2 text-sm font-semibold text-[#0F1B33]"
+            >
+              ← Back to My Story
+            </button>
+          </div>
+
+          {loading && <p className="text-sm text-[#4A5878]">Loading preview…</p>}
+          {error && !loading && <p className="text-sm text-red-600">{error}</p>}
+
+          {!loading && !error && profile && (
+            <ConnectionProfileView profile={profile} mode="preview" />
+          )}
+        </div>
+      </Panel>
+    </PageShell>
+  );
+}
+
+
+
+===== src/app/photo-review/page.tsx =====
+"use client";
+
+import React from "react";
+import { useRouter } from "next/navigation";
+import { supabaseBrowser } from "@/lib/supabaseBrowser";
+
+type PendingUserRow = {
+  user_id: string;
+  screen_name: string | null;
+  display_name: string | null;
+  date_of_birth: string | null;
+  gender_identity: string | null;
+  tier: string | null;
+  status: string | null;
+  pending_count: number;
+  needs_attention_count: number;
+  rejected_count: number;
+  approved_count: number;
+  oldest_pending_at: string | null;
+  newest_pending_at: string | null;
+
+  // The API should return this for every user, including approved-only users.
+  // The fallbacks below keep the page compatible with the older response.
+  latest_photo_at?: string | null;
+  latest_activity_at?: string | null;
+};
+
+type NotificationSummary = {
+  unreadCount: number;
+  newestAt: string | null;
+};
+
+type QueueFilter = "pending" | "needs_attention" | "rejected" | "all";
+
+type PaginationState = {
+  total: number | null;
+  hasNext: boolean;
+};
+
+type LoadOptions = {
+  silent?: boolean;
+};
+
+const PAGE_SIZE = 25;
+
+function calcAge(dob: string | null) {
+  if (!dob) return null;
+  const d = new Date(dob);
+  if (Number.isNaN(d.getTime())) return null;
+
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const monthDiff = now.getMonth() - d.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < d.getDate())) {
+    age -= 1;
+  }
+
+  return age;
+}
+
+function asFiniteNumber(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+
+  return null;
+}
+
+function asBoolean(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "boolean") return value;
+    if (value === "true") return true;
+    if (value === "false") return false;
+  }
+
+  return null;
+}
+
+function getMostRecentAt(row: PendingUserRow) {
+  return (
+    row.latest_photo_at ??
+    row.latest_activity_at ??
+    row.newest_pending_at ??
+    row.oldest_pending_at ??
+    null
+  );
+}
+
+function getTimestamp(value: string | null | undefined) {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function sortNewestFirst(rows: PendingUserRow[]) {
+  return [...rows].sort((a, b) => {
+    const dateDifference =
+      getTimestamp(getMostRecentAt(b)) - getTimestamp(getMostRecentAt(a));
+
+    if (dateDifference !== 0) return dateDifference;
+
+    const aName = a.display_name ?? a.screen_name ?? a.user_id;
+    const bName = b.display_name ?? b.screen_name ?? b.user_id;
+    return aName.localeCompare(bName);
+  });
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
+export default function PhotoReviewPage() {
+  const router = useRouter();
+
+  const [rows, setRows] = React.useState<PendingUserRow[]>([]);
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [statusFilter, setStatusFilter] =
+    React.useState<QueueFilter>("pending");
+  const [page, setPage] = React.useState(1);
+  const [pagination, setPagination] = React.useState<PaginationState>({
+    total: null,
+    hasNext: false,
+  });
+  const [notificationSummary, setNotificationSummary] =
+    React.useState<NotificationSummary | null>(null);
+
+  const activeRequestRef = React.useRef<AbortController | null>(null);
+
+  const load = React.useCallback(
+    async (options: LoadOptions = {}) => {
+      const silent = options.silent === true;
+      const controller = new AbortController();
+
+      activeRequestRef.current?.abort();
+      activeRequestRef.current = controller;
+
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabaseBrowser.auth.getSession();
+
+        if (sessionError) {
+          console.error("PhotoReviewPage getSession error:", sessionError);
+          setError(sessionError.message || "Could not verify your session.");
+          setRows([]);
+          setPagination({ total: null, hasNext: false });
+          return;
+        }
+
+        const token = session?.access_token ?? null;
+
+        if (!token) {
+          console.error("PhotoReviewPage: no access token found.");
+          setError("Not logged in.");
+          setRows([]);
+          setPagination({ total: null, hasNext: false });
+          return;
+        }
+
+        const offset = (page - 1) * PAGE_SIZE;
+        const params = new URLSearchParams({
+          status: statusFilter,
+          page: String(page),
+          pageSize: String(PAGE_SIZE),
+          limit: String(PAGE_SIZE),
+          offset: String(offset),
+          sort: "latest_photo_at",
+          order: "desc",
+        });
+
+        // "All" should mean every user with a non-archived profile photo,
+        // including users whose photos are all approved.
+        if (statusFilter === "all") {
+          params.set("includeApprovedOnly", "true");
+        }
+
+        const res = await fetch(`/api/photos/pending-users?${params}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        const json = await res.json().catch(() => ({}));
+        const rawRows = Array.isArray(json?.rows)
+          ? json.rows
+          : Array.isArray(json?.users)
+            ? json.users
+            : [];
+        const nextRows = sortNewestFirst(rawRows as PendingUserRow[]);
+        const responsePagination = json?.pagination ?? {};
+        const total = asFiniteNumber(
+          responsePagination?.total,
+          responsePagination?.totalCount,
+          json?.total,
+          json?.totalCount,
+        );
+        const explicitHasNext = asBoolean(
+          responsePagination?.hasNext,
+          responsePagination?.hasMore,
+          json?.hasNext,
+          json?.hasMore,
+        );
+        const hasNext =
+          explicitHasNext ??
+          (total !== null
+            ? offset + nextRows.length < total
+            : nextRows.length === PAGE_SIZE);
+
+        console.log("PhotoReviewPage pending-users response:", res.status, {
+          ...json,
+          rows: `[${nextRows.length} rows]`,
+        });
+
+        if (!res.ok) {
+          setError(json?.error ?? `Failed to load (${res.status})`);
+          setRows(nextRows);
+          setPagination({ total, hasNext });
+          return;
+        }
+
+        // This fallback sort fixes an older API response that arrived oldest-first.
+        // The API must also sort before applying OFFSET/LIMIT so pagination is
+        // globally newest-first, not merely newest-first inside each page.
+        setRows(nextRows);
+        setPagination({ total, hasNext });
+        setError(null);
+
+        const {
+          count,
+          data: notificationRows,
+          error: notificationError,
+        } = await supabaseBrowser
+          .from("photo_review_notifications")
+          .select("id, created_at", { count: "exact" })
+          .eq("status", "unread")
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (notificationError) {
+          // Do not break the queue if this table or its RLS policy is not deployed.
+          console.warn(
+            "PhotoReviewPage notification summary skipped:",
+            notificationError.message,
+          );
+          setNotificationSummary(null);
+        } else {
+          setNotificationSummary({
+            unreadCount: count ?? notificationRows?.length ?? 0,
+            newestAt: notificationRows?.[0]?.created_at ?? null,
+          });
+        }
+      } catch (loadError: unknown) {
+        if (
+          loadError instanceof DOMException &&
+          loadError.name === "AbortError"
+        ) {
+          return;
+        }
+
+        if (
+          errorMessage(loadError, "")
+            .toLowerCase()
+            .includes("aborted")
+        ) {
+          return;
+        }
+
+        console.error("PhotoReviewPage load failed:", loadError);
+        setError(
+          errorMessage(
+            loadError,
+            "Something went wrong while loading the photo queue.",
+          ),
+        );
+      } finally {
+        if (activeRequestRef.current === controller) {
+          activeRequestRef.current = null;
+          if (!silent) setLoading(false);
+        }
+      }
+    },
+    [page, statusFilter],
+  );
+
+  React.useEffect(() => {
+    void load();
+
+    // Staff can leave the queue open and still see fresh uploads.
+    const intervalId = window.setInterval(() => {
+      void load({ silent: true });
+    }, 30_000);
+
+    return () => {
+      window.clearInterval(intervalId);
+      activeRequestRef.current?.abort();
+    };
+  }, [load]);
+
+  function changeFilter(nextFilter: QueueFilter) {
+    if (nextFilter === statusFilter) return;
+    setPage(1);
+    setStatusFilter(nextFilter);
+  }
+
+  function getAwaitingCount(row: PendingUserRow) {
+    if (statusFilter === "needs_attention") return row.needs_attention_count;
+    if (statusFilter === "rejected") return row.rejected_count;
+    if (statusFilter === "pending") return row.pending_count;
+    return row.pending_count + row.needs_attention_count + row.rejected_count;
+  }
+
+  const unreadNotificationCount = notificationSummary?.unreadCount ?? 0;
+  const totalPages =
+    pagination.total !== null
+      ? Math.max(1, Math.ceil(pagination.total / PAGE_SIZE))
+      : null;
+  const canGoPrevious = page > 1 && !loading;
+  const canGoNext =
+    !loading &&
+    (totalPages !== null ? page < totalPages : pagination.hasNext);
+  const firstVisible = rows.length > 0 ? (page - 1) * PAGE_SIZE + 1 : 0;
+  const lastVisible = rows.length > 0 ? firstVisible + rows.length - 1 : 0;
+  const visibleCountLabel =
+    pagination.total !== null
+      ? `${pagination.total} ${pagination.total === 1 ? "user" : "users"}`
+      : `${rows.length} ${rows.length === 1 ? "user" : "users"} on this page`;
+  const queueDescription =
+    statusFilter === "all"
+      ? "All users with profile photos"
+      : "Queue of users with photos awaiting review";
+
+  return (
+    <div className="p-6">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-[#0F1B33]">
+            Photo Review
+          </h1>
+          <p className="mt-1 text-sm text-gray-600">
+            {queueDescription} • {visibleCountLabel}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => void load()}
+          disabled={loading}
+          className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loading ? "Loading…" : "Refresh"}
+        </button>
+      </div>
+
+      {unreadNotificationCount > 0 && (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="font-semibold">🔔 Photo review alert</div>
+          <div className="mt-1">
+            {unreadNotificationCount} uploaded{" "}
+            {unreadNotificationCount === 1 ? "photo needs" : "photos need"}{" "}
+            staff review
+            {notificationSummary?.newestAt
+              ? ` • Latest upload ${new Date(notificationSummary.newestAt).toLocaleString()}`
+              : ""}
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="my-4 flex flex-wrap gap-2">
+        {[
+          { key: "pending", label: "Pending" },
+          { key: "needs_attention", label: "Needs Attention" },
+          { key: "rejected", label: "Rejected" },
+          { key: "all", label: "All" },
+        ].map((item) => {
+          const active = statusFilter === item.key;
+
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => changeFilter(item.key as QueueFilter)}
+              className={[
+                "rounded-full border px-4 py-2 text-sm transition",
+                active
+                  ? "border-blue-600 bg-blue-600 text-white"
+                  : "bg-white text-black hover:bg-gray-50",
+              ].join(" ")}
+            >
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border bg-white">
+        <div className="grid grid-cols-12 gap-2 border-b bg-gray-50 px-4 py-3 text-xs font-semibold text-gray-600">
+          <div className="col-span-4">User</div>
+          <div className="col-span-2">Age / Gender</div>
+          <div className="col-span-2">Tier / Status</div>
+          <div className="col-span-2">Awaiting / Approved</div>
+          <div className="col-span-2">Most Recent ↓</div>
+        </div>
+
+        {loading ? (
+          <div className="p-6 text-sm text-gray-600">Loading…</div>
+        ) : rows.length === 0 ? (
+          <div className="p-6 text-sm text-gray-600">
+            {statusFilter === "all"
+              ? "No users with profile photos were found."
+              : "Nothing in this queue right now 🎉"}
+          </div>
+        ) : (
+          rows.map((row) => {
+            const age = calcAge(row.date_of_birth);
+            const name = row.display_name ?? row.screen_name ?? "—";
+            const gender = row.gender_identity ?? "—";
+            const tier = row.tier ?? "—";
+            const status = row.status ?? "—";
+            const awaiting = getAwaitingCount(row);
+            const mostRecentAt = getMostRecentAt(row);
+
+            return (
+              <button
+                key={row.user_id}
+                type="button"
+                onClick={() => router.push(`/users/${row.user_id}?tab=photos`)}
+                className="grid w-full grid-cols-12 gap-2 border-b px-4 py-3 text-left hover:bg-gray-50"
+              >
+                <div className="col-span-4">
+                  <div className="text-sm font-medium text-gray-900">
+                    {name}
+                  </div>
+                  <div className="text-xs text-gray-500">{row.user_id}</div>
+                </div>
+
+                <div className="col-span-2 text-sm text-gray-800">
+                  {age != null ? age : "—"} / {gender}
+                </div>
+
+                <div className="col-span-2 text-sm text-gray-800">
+                  {tier} / {status}
+                </div>
+
+                <div className="col-span-2 text-sm text-gray-800">
+                  <span className="font-semibold">{awaiting}</span> /{" "}
+                  {row.approved_count}
+                </div>
+
+                <div className="col-span-2 text-sm text-gray-800">
+                  {mostRecentAt
+                    ? new Date(mostRecentAt).toLocaleString()
+                    : "—"}
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-gray-500">
+          {rows.length > 0 ? (
+            <>
+              Showing {firstVisible}–{lastVisible}
+              {pagination.total !== null ? ` of ${pagination.total}` : ""} •
+              newest photos first
+            </>
+          ) : (
+            "Newest photos appear first."
+          )}
+        </p>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={!canGoPrevious}
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Previous
+          </button>
+
+          <span className="min-w-24 text-center text-sm text-gray-600">
+            Page {page}
+            {totalPages !== null ? ` of ${totalPages}` : ""}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setPage((current) => current + 1)}
+            disabled={!canGoNext}
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+
+      <p className="mt-3 text-xs text-gray-500">
+        Clicking a row opens the full User 360 page on the Photos tab so staff
+        can review context before making a decision.
+      </p>
+    </div>
+  );
+}
+
+
+
+===== src/components/client-preview/ClientProfileView.tsx =====
+"use client";
+
+
+
+import Image from "next/image";
+import { useMemo, useState } from "react";
+
+
+
+type ConnectionProfile = {
+  id: string;
+  screen_name: string | null;
+  greeting: string | null;
+  bio: string | null;
+  about: string | null;
+
+  date_of_birth: string | null;
+  city: string | null;
+  region: string | null;
+  hometown: string | null;
+
+  gender_identity: string | null;
+  sexual_orientation: string | null;
+  pronouns: string | null;
+
+  relationship_intent: string | null;
+
+  primary_photo_url: string | null;
+  photos: string | string[] | null;
+
+  interests: string[] | null;
+  compatibility_alignments: Record<string, any> | null;
+  match_preferences: Record<string, any> | null;
+
+  mira_profile_insight: string | null;
+  connection_preference: string | null;
+
+looking_for_age_min: number | null;
+looking_for_age_max: number | null;
+
+// if this is text[] in Supabase:
+seeking_genders: string[] | null;
+
+// If you’re not 100% sure on shape yet, use this safer version:
+// seeking_genders: string | string[] | null;
+
+};
+
+function calculateAge(dob: string | null): number | null {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (Number.isNaN(birth.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
+
+function normalizePhotos(primary: string | null, raw: string | string[] | null): string[] {
+  let list: string[] = [];
+
+  if (Array.isArray(raw)) {
+    list = raw.filter((p): p is string => typeof p === "string" && p.trim() !== "");
+  } else if (typeof raw === "string" && raw.trim() !== "") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        list = parsed.filter((p): p is string => typeof p === "string" && p.trim() !== "");
+      } else {
+        list = [raw];
+      }
+    } catch {
+      list = [raw];
+    }
+  }
+
+  if (list.length === 0 && primary) list = [primary];
+  return list;
+}
+
+function buildTimeSpentSummary(interests: string[]): string {
+  if (!interests || interests.length === 0) {
+    return "This section is still taking shape — adding a few interests helps people picture your everyday rhythm.";
+  }
+
+  const normalized = interests.map((i) => i.replace(/_/g, " ").toLowerCase());
+
+  const home = normalized.filter((i) =>
+    ["baking", "cooking", "gardening", "diy", "craft", "reading", "board games"].some((k) => i.includes(k))
+  );
+
+  const social = normalized.filter((i) =>
+    ["concert", "festival", "comedy", "dining", "travel", "events"].some((k) => i.includes(k))
+  );
+
+  const growth = normalized.filter((i) =>
+    ["class", "workshop", "learning", "course"].some((k) => i.includes(k))
+  );
+
+  const parts: string[] = [];
+
+  if (home.length > 0) {
+    parts.push("quiet, creative moments at home");
+  }
+
+  if (growth.length > 0) {
+    parts.push("learning and personal growth");
+  }
+
+  if (social.length > 0) {
+    parts.push("getting out to enjoy shared experiences");
+  }
+
+  if (parts.length === 0) {
+    return "I enjoy spending my time in ways that feel meaningful and balanced, mixing solo moments with time spent connecting with others.";
+  }
+
+  return `I enjoy a mix of ${parts.join(", ")}. My time tends to feel balanced — with space for both reflection and connection.`;
+}
+
+function buildLookingFor(
+  profile: Pick<
+    ConnectionProfile,
+    | "match_preferences"
+    | "relationship_intent"
+    | "connection_preference"
+    | "looking_for_age_min"
+    | "looking_for_age_max"
+    | "seeking_genders"
+  >
+): string[] {
+  const out: string[] = [];
+
+  // 0) Freeform text (if you store it)
+  if (profile.connection_preference?.trim()) {
+    out.push(profile.connection_preference.trim());
+  }
+
+  // 1) Relationship intent (stored as column)
+  if (profile.relationship_intent?.trim()) {
+    out.push(profile.relationship_intent.trim());
+  }
+
+  // 2) Age range prefs (stored as columns)
+  if (profile.looking_for_age_min || profile.looking_for_age_max) {
+    const min = profile.looking_for_age_min ?? "—";
+    const max = profile.looking_for_age_max ?? "—";
+    out.push(`Age range: ${min}–${max}`);
+  }
+
+  // 3) Seeking genders (stored as array)
+  if (Array.isArray(profile.seeking_genders) && profile.seeking_genders.length > 0) {
+    out.push(`Seeking: ${profile.seeking_genders.join(", ")}`);
+  }
+
+  // 4) Match preferences (jsonb) — support MANY shapes
+  const mp = profile.match_preferences as Record<string, any> | null | undefined;
+  if (mp && typeof mp === "object") {
+    const COPY_MAP: Record<string, string> = {
+      emotionally_stable: "Emotional maturity and steady communication",
+      emotionally_available: "Emotional availability and presence",
+      emotional_connection: "A genuine emotional connection",
+      deep_connection: "Depth, trust, and real connection",
+      playful: "A sense of humor and lightness",
+      long_term: "A meaningful, long-term connection",
+      intentional: "Dating with intention and clarity",
+      mutual_respect: "Mutual respect and kindness",
+      honest_communication: "Open and honest communication",
+      shared_values: "Aligned values and outlook",
+      financially_stable: "Responsible and self-sufficient",
+      physical_attraction: "Mutual attraction and chemistry",
+      somewhat_aligned: "A shared foundation with room to grow",
+      long_term_playful: "Long-term potential with playfulness",
+    };
+
+    const STOP = new Set(["no_preference", "none", "unsure", "open_to_discussion"]);
+
+    // Collect tokens from:
+    // - true flags
+    // - strings
+    // - arrays of strings
+    // - nested objects that contain strings/bools
+    const tokens: string[] = [];
+
+    const walk = (v: any) => {
+      if (v === true) return; // handled via keys in object traversal
+      if (typeof v === "string") tokens.push(v.trim());
+      else if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === "object") {
+        Object.entries(v).forEach(([k, val]) => {
+          if (val === true) tokens.push(k);
+          else walk(val);
+        });
+      }
+    };
+
+    walk(mp);
+
+    const mapped = tokens
+      .filter((t) => t && !STOP.has(t))
+      .map((t) => COPY_MAP[t] ?? null)
+      .filter(Boolean) as string[];
+
+    out.push(...mapped);
+  }
+
+  // Dedup + cap
+  return Array.from(new Set(out)).slice(0, 6);
+}
+
+
+
+export function ConnectionProfileView({
+  profile,
+}: {
+  profile: ConnectionProfile;
+  mode: "connection" | "preview";
+  onStartChat?: () => void;
+  onSendWave?: (type?: "wave") => void;
+  onBack?: () => void;
+}) {
+
+  const photos = useMemo(
+    () => normalizePhotos(profile.primary_photo_url, profile.photos),
+    [profile.primary_photo_url, profile.photos]
+  );
+
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activePhoto = photos[activeIndex] ?? null;
+
+  
+  const age = calculateAge(profile.date_of_birth);
+
+  const currentLocation =
+    profile.city || profile.region ? [profile.city, profile.region].filter(Boolean).join(", ") : null;
+
+  const lookingFor = buildLookingFor(profile);
+
+  return (
+    <section className="w-full text-sm leading-relaxed text-[#4A5878]">
+      {/* Photo floats right */}
+      {activePhoto ? (
+        <div className="float-right ml-6 mb-4 w-full max-w-[320px]">
+          <div className="aspect-[4/5] overflow-hidden rounded-3xl border border-white/60 shadow-sm bg-white">
+            <Image
+              src={activePhoto}
+              alt={profile.screen_name || "Connection photo"}
+              width={512}
+              height={640}
+              className="h-full w-full object-cover"
+            />
+          </div>
+
+          {photos.length > 1 && (
+            <div className="mt-2 flex items-center justify-center gap-2">
+              {photos.map((url, index) => (
+                <button
+                  key={url + index}
+                  type="button"
+                  onClick={() => setActiveIndex(index)}
+                  className={[
+                    "px-3 py-1 text-xs font-medium rounded-full border transition-all",
+                    index === activeIndex
+                      ? "bg-[#b4c7fa] border-[#FB6AAB] text-white"
+                      : "bg-white border-[#b4c7fa] text-[#4A5878]",
+                  ].join(" ")}
+                >
+                  ⚪️
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="float-right ml-6 mb-4 w-full max-w-[320px]">
+          <div className="aspect-[4/5] rounded-3xl border border-dashed border-[#C4D0F5] bg-white/40 flex items-center justify-center text-sm text-[#4A5878] text-center px-4">
+            No photos yet — once they add some, you’ll see them here.
+          </div>
+        </div>
+      )}
+
+      {/* Greeting */}
+      {profile.greeting && <p className="mb-3">{profile.greeting}</p>}
+
+      {/* Quick facts */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
+        {profile.screen_name && <span className="font-medium text-[#0F1B33]">{profile.screen_name}</span>}
+        {profile.screen_name && (age !== null || profile.gender_identity || profile.sexual_orientation) && <span>· ✨ ·</span>}
+        {age !== null && <span>{age}</span>}
+        {age !== null && (profile.gender_identity || profile.sexual_orientation) && <span>· ✨ ·</span>}
+        {profile.gender_identity && <span>{profile.gender_identity}</span>}
+        {profile.gender_identity && profile.sexual_orientation && <span>· ✨ ·</span>}
+        {profile.sexual_orientation && <span>{profile.sexual_orientation}</span>}
+        {profile.pronouns && <span>{profile.pronouns}</span>}
+      </div>
+
+      {/* Location */}
+      {(currentLocation || profile.hometown) && (
+        <div className="space-y-1 mb-4">
+          {currentLocation && (
+            <p>
+              <span className="font-medium text-[#0F1B33]">Currently in:</span> {currentLocation}
+            </p>
+          )}
+          {profile.hometown && (
+            <p>
+              <span className="font-medium text-[#0F1B33]">Originally from:</span> {profile.hometown}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* About */}
+      <h3 className="text-lg font-semibold text-[#0F1B33] mb-1">About</h3>
+      <p className="whitespace-pre-line">
+        {profile.about ||
+          `${profile.screen_name || "They"} are looking for a connection that feels aligned and grounded. They’ve taken time to clarify what matters to them, so both people can feel respected, safe, and on the same page.`}
+      </p>
+
+{/* Coach Mira note */}
+<div className="mt-4 rounded-2xl border border-[#D7CCFF] bg-[#F5F3FF] px-4 py-3">
+  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#7A5DD6] mb-1">
+    Coach Mira’s compatibility note
+  </p>
+<p className="text-sm text-[#4A5878]">
+  Coach Mira will give you insight into how you may align.
+</p>
+
+</div>
+
+
+      {/* 3 blocks (keeps your existing classes) */}
+      <div className="profile-sections mt-6">
+        {/* Compatibility Highlights */}
+        <div className="profile-card">
+          <h3 className="mb-3 text-[22px] font-extrabold tracking-[-0.02em] text-[#0F1B33]">
+            Compatibility Highlights
+          </h3>
+
+          <ul className="list-disc space-y-1 pl-5 text-sm text-[#4A5878]">
+            {profile.compatibility_alignments?.answers ? (
+              Object.entries(profile.compatibility_alignments.answers)
+                .slice(0, 6)
+                .flatMap(([group, values]) =>
+                  (Array.isArray(values) ? values : []).map((value) => (
+                    <li key={`${group}-${value}`}>
+                      <span className="font-semibold">
+                        {group.replace(/([A-Z])/g, " $1").replace(/_/g, " ")}:
+                      </span>{" "}
+                      {String(value).replace(/_/g, " ")}
+                    </li>
+                  ))
+                )
+            ) : (
+              <li className="italic text-[#8A94B2]">No highlights shared yet.</li>
+            )}
+          </ul>
+        </div>
+
+{/* How I Spend My Time */}
+<div className="profile-card">
+  <h3 className="mb-3 text-[22px] font-extrabold tracking-[-0.02em] text-[#0F1B33]">
+    How I Spend My Time
+  </h3>
+
+  {Array.isArray(profile.interests) && profile.interests.length > 0 ? (
+    <>
+     <p className="mb-3 text-sm text-[#4A5878]">
+  {buildTimeSpentSummary(profile.interests ?? [])}
+</p>
+
+
+    </>
+  ) : (
+    <p className="text-sm italic text-[#8A94B2]">
+      This section looks empty right now — adding a few interests helps people picture your everyday life.
+    </p>
+  )}
+</div>
+
+
+        {/* What I'm Looking For */}
+        <div className="profile-card">
+          <h3 className="mb-3 text-[22px] font-extrabold tracking-[-0.02em] text-[#0F1B33]">
+            What I’m Looking For
+          </h3>
+
+          {lookingFor.length > 0 ? (
+            <ul className="list-disc space-y-1 pl-5 text-sm text-[#4A5878]">
+              {lookingFor.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm italic text-[#8A94B2]">
+              No preferences shared yet.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Clear float */}
+      <div className="clear-both" />
+
+
+
+    </section>
+  );
+}
+
+
+
+===== src/components/photo-review/UserPendingPhotoCards.tsx =====
+"use client";
+
+import React from "react";
+import PhotoReviewCard from "@/components/PhotoReviewCard";
+import { supabaseBrowser } from "@/lib/supabaseBrowser";
+import { useRouter } from "next/navigation";
+
+export type PendingPhoto = {
+  id: string;
+  user_id: string;
+  signed_url?: string | null;
+  displayUrl?: string | null;
+  imageUrl?: string | null;
+  fallbackUrl?: string | null;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
+  thumbPath?: string | null;
+  photoUrlError?: string | null;
+  review_status: string;
+  photo_kind?: string | null;
+  kind?: string | null;
+  staff_notes?: string | null;
+  admin_notes?: string | null;
+};
+
+export default function UserPendingPhotoCards({
+  photos,
+  onChanged,
+}: {
+  photos: PendingPhoto[];
+  onChanged?: () => void;
+}) {
+  const [busyId, setBusyId] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const router = useRouter();
+
+  async function callReviewApi(
+    photoId: string,
+    status: "approved" | "needs_attention" | "rejected",
+    note?: string
+  ) {
+    setBusyId(photoId);
+    setError(null);
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabaseBrowser.auth.getSession();
+
+      if (sessionError) {
+        console.error("UserPendingPhotoCards getSession error:", sessionError);
+        setError(sessionError.message || "Could not verify your session.");
+        setBusyId(null);
+        return;
+      }
+
+      const token = session?.access_token ?? null;
+
+      if (!token) {
+        setError("Not logged in.");
+        setBusyId(null);
+        return;
+      }
+
+      console.log("UserPendingPhotoCards review session:", {
+        auth_user_id: session?.user?.id ?? null,
+        auth_email: session?.user?.email ?? null,
+        hasToken: !!token,
+      });
+
+      const res = await fetch("/api/photos/review", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+        body: JSON.stringify({
+          photo_id: photoId,
+          status,
+          notes: note ?? null,
+          actor: "admin",
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+
+      console.log("UserPendingPhotoCards review response:", res.status, json);
+
+      setBusyId(null);
+
+      if (!res.ok) {
+        setError(json?.error ?? `Review failed (${res.status})`);
+        return;
+      }
+
+      onChanged?.();
+      router.refresh();
+    } catch (err: unknown) {
+      console.error("UserPendingPhotoCards review failed:", err);
+      setBusyId(null);
+      setError(err instanceof Error ? err.message : "Photo review failed.");
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {error ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {photos.map((p) => (
+          <PhotoReviewCard
+            key={p.id}
+            photo={p}
+            busy={busyId === p.id}
+            onApprove={() => callReviewApi(p.id, "approved")}
+            onNeedsAttention={(note) =>
+              callReviewApi(p.id, "needs_attention", note)
+            }
+            onReject={(note) => callReviewApi(p.id, "rejected", note)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+
+===== src/components/PhotoReviewCard.tsx =====
+"use client";
+
+import React from "react";
+import {
+  isSignedSupabaseStorageUrl,
+  logFailedImageResponse,
+  refreshProfilePhotoSignedUrl,
+} from "@/lib/photoSignedUrlClient";
+
+type Props = {
+  photo: {
+    id: string;
+    user_id: string;
+    signed_url?: string | null;
+    displayUrl?: string | null;
+    imageUrl?: string | null;
+    fallbackUrl?: string | null;
+    storage_bucket?: string | null;
+    storage_path?: string | null;
+    thumbPath?: string | null;
+    photoUrlError?: string | null;
+    review_status: string;
+   staff_notes?: string | null;
+   admin_notes?: string | null;
+   photo_kind?: string | null
+   kind?: string | null;
+  };
+  busy?: boolean;
+  onApprove: () => void;
+  onReject: (note: string) => void; // required
+  onNeedsAttention: (note: string) => void; // required
+};
+
+export default function PhotoReviewCard({
+  photo,
+  busy,
+  onApprove,
+  onReject,
+  onNeedsAttention,
+}: Props) {
+  const [noteMode, setNoteMode] = React.useState<"admin" | "reject" | null>(
+    null
+  );
+  const [note, setNote] = React.useState("");
+  const [previewFailed, setPreviewFailed] = React.useState(false);
+  const [srcOverride, setSrcOverride] = React.useState<string | null>(null);
+  const [fallbackSrcOverride, setFallbackSrcOverride] = React.useState<string | null>(null);
+  const [triedRefresh, setTriedRefresh] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  const primarySrc = photo.displayUrl ?? photo.signed_url ?? "";
+  const fallbackSrc =
+    fallbackSrcOverride ??
+    photo.fallbackUrl ??
+    (photo.imageUrl && photo.imageUrl !== primarySrc ? photo.imageUrl : null);
+  const src = srcOverride ?? primarySrc;
+  const canApprove = !!src && !previewFailed && !refreshing;
+  const status = photo.review_status ?? "pending";  
+
+  async function handleImageError() {
+    const logMeta = {
+      photoId: photo.id,
+      userId: photo.user_id,
+      storageBucket: photo.storage_bucket,
+      storagePath: photo.storage_path,
+      thumbPath: photo.thumbPath,
+      displayUrl: src,
+      photoUrlError: photo.photoUrlError,
+    };
+
+    console.error("Profile photo failed to render", logMeta);
+
+    if (isSignedSupabaseStorageUrl(src)) {
+      await logFailedImageResponse(src, logMeta);
+    }
+
+    if (!triedRefresh && isSignedSupabaseStorageUrl(src)) {
+      setTriedRefresh(true);
+      setRefreshing(true);
+
+      try {
+        const refreshed = await refreshProfilePhotoSignedUrl(photo.id);
+        const refreshedSrc = refreshed.displayUrl ?? refreshed.imageUrl;
+        const refreshedFallbackSrc = refreshed.fallbackUrl ?? refreshed.imageUrl;
+
+        console.log("Profile photo signed URL refreshed after render error", {
+          ...logMeta,
+          refreshedDisplayUrlCreated: !!refreshed.displayUrl,
+          refreshedFullUrlCreated: !!refreshed.imageUrl,
+          refreshedFallbackUrlCreated: !!refreshedFallbackSrc,
+          refreshedPhotoUrlError: refreshed.photoUrlError,
+        });
+
+        if (refreshedSrc) {
+          setFallbackSrcOverride(refreshedFallbackSrc);
+          setSrcOverride(refreshedSrc);
+          setRefreshing(false);
+          return;
+        }
+      } catch (error) {
+        console.error("Profile photo signed URL refresh failed", {
+          ...logMeta,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      setRefreshing(false);
+    }
+
+    if (fallbackSrc && src !== fallbackSrc) {
+      setSrcOverride(fallbackSrc);
+      return;
+    }
+
+    setPreviewFailed(true);
+  }
+  function closeNote() {
+    setNoteMode(null);
+    setNote("");
+  }
+
+  function submitNote() {
+    const trimmed = note.trim();
+    if (!trimmed) return;
+
+    if (noteMode === "admin") onNeedsAttention(trimmed);
+    if (noteMode === "reject") onReject(trimmed);
+
+    closeNote();
+  }
+
+  return (
+    <div className="rounded-2xl border bg-white p-4 shadow-sm">
+      {/* Photo preview box (size capped) */}
+      <div className="w-full">
+        <div className="mx-auto w-full max-w-[420px] overflow-hidden rounded-xl bg-gray-100">
+          <div className="relative w-full">
+            {src && !previewFailed ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={src}
+                alt="Pending photo"
+                className="block w-full h-auto object-contain max-h-[420px]"
+                onError={() => void handleImageError()}
+              />
+            ) : (
+              <div className="flex h-[220px] w-full items-center justify-center text-sm text-gray-500">
+                Preview unavailable
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+{/* Meta + actions */}
+<div className="mt-4 grid grid-cols-[1fr,200px] gap-4 items-start">
+  {/* LEFT: meta + status */}
+  <div className="min-w-0">
+    {/* User ID - single line */}
+    <div className="text-xs text-gray-600 flex items-center gap-2">
+      <span className="text-gray-500">User ID:</span>
+      <span className="font-mono text-gray-800 truncate">{photo.user_id}</span>
+    </div>
+
+    {/* Photo ID - single line */}
+    <div className="text-xs text-gray-600 flex items-center gap-2 mt-1">
+      <span className="text-gray-500">Photo ID:</span>
+      <span className="font-mono text-gray-800 truncate">{photo.id}</span>
+    </div>
+
+<div className="text-base text-slate-700 font-semibold inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold border">
+  
+  kind: {String(photo.photo_kind ?? photo.kind ?? "")}
+</div>
+    {/* Status label + badge in the open space */}
+    <div className="mt-3">
+      <div className="text-xs text-gray-500 mb-1">Status</div>
+      <div
+        className={[
+          "inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold border",
+          status === "approved"
+            ? "bg-green-50 text-green-700 border-green-200"
+            : status === "rejected"
+            ? "bg-red-50 text-red-700 border-red-200"
+            : status === "needs_admin_review"
+            ? "bg-yellow-50 text-yellow-800 border-yellow-200"
+            : "bg-gray-100 text-gray-700 border-gray-200",
+        ].join(" ")}
+      >
+        {status?.toUpperCase().replace(/_/g, " ")}
+      </div>
+    </div>
+  </div>
+
+<div className="flex items-center gap-2">
+  {photo.photo_kind === "identity_selfie" && (
+    <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-600 text-white">
+      Identity Selfie
+    </span>
+  )}
+</div>
+          <div className="flex shrink-0 flex-col gap-2">
+            <button
+              disabled={!!busy || !canApprove}
+              onClick={onApprove}
+              title={canApprove ? "Approve photo" : "Preview unavailable"}
+              className="px-4 py-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              ✅ Approve
+            </button>
+
+            <button
+              disabled={!!busy}
+              onClick={() => {
+                setNoteMode("admin");
+                setNote("");
+              }}
+              className="px-4 py-2 rounded-full bg-yellow-100 text-yellow-800 hover:bg-yellow-200 transition disabled:opacity-60"
+            >
+              ⚠️ Admin Review
+            </button>
+
+            <button
+              disabled={!!busy}
+              onClick={() => {
+                setNoteMode("reject");
+                setNote("");
+              }}
+              className="px-4 py-2 rounded-full bg-red-100 text-red-700 hover:bg-red-200 transition disabled:opacity-60"
+            >
+              ❌ Reject
+            </button>
+          </div>
+        </div>
+        
+
+        {/* Row 2: note panel (full width) */}
+        {noteMode && (
+          <div className="w-full rounded-xl border bg-white p-3">
+            <label className="block text-xs text-gray-600 mb-2">
+              {noteMode === "admin"
+                ? "Admin review note (required)"
+                : "Rejection reason (required)"}
+            </label>
+
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+              rows={3}
+              placeholder={
+                noteMode === "admin"
+                  ? "Why is this questionable? (e.g., face not visible, child in photo, screenshot, looks fake...)"
+                  : "Why are you rejecting this photo? (e.g., explicit content, no person, child, hate symbol, fake/AI, copyrighted...)"
+              }
+              disabled={!!busy}
+            />
+
+            <div className="mt-3 flex gap-2">
+              <button
+                disabled={!!busy || note.trim().length === 0}
+                onClick={submitNote}
+                className={
+                  "px-4 py-2 rounded-full text-black transition disabled:opacity-60 " +
+                  (noteMode === "admin"
+                    ? "bg-yellow-600 hover:bg-yellow-700"
+                    : "bg-red-600 hover:bg-red-700")
+                }
+              >
+                Submit
+              </button>
+
+              <button
+                disabled={!!busy}
+                onClick={closeNote}
+                className="px-4 py-2 rounded-full border hover:bg-gray-50 transition disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+            {/* Existing review notes */}
+{(photo.staff_notes || photo.admin_notes) && (
+  <div className="mb-3 w-full rounded-lg bg-slate-50 p-3 text-xs">
+    {photo.staff_notes && (
+      <div className="text-slate-700">
+        <span className="font-semibold">Staff note:</span> {photo.staff_notes}
+      </div>
+    )}
+
+    {photo.admin_notes && (
+      <div className="mt-1 text-amber-700">
+        <span className="font-semibold">Admin note:</span> {photo.admin_notes}
+      </div>
+    )}
+  </div>
+)}
+          </div>
+          
+        )}
+      </div>
+   
+  );
+}
+
+
+
+===== src/components/ProfileImagePreview.tsx =====
+"use client";
+
+import React from "react";
+import {
+  isSignedSupabaseStorageUrl,
+  logFailedImageResponse,
+  refreshProfilePhotoSignedUrl,
+} from "@/lib/photoSignedUrlClient";
+
+type Props = {
+  src: string | null;
+  fallbackSrc?: string | null;
+  photoId?: string | null;
+  alt: string;
+  className?: string;
+  fallbackClassName?: string;
+  meta?: Record<string, unknown>;
+};
+
+export default function ProfileImagePreview({
+  src,
+  fallbackSrc,
+  photoId,
+  alt,
+  className,
+  fallbackClassName,
+  meta,
+}: Props) {
+  const [failed, setFailed] = React.useState(false);
+  const [srcOverride, setSrcOverride] = React.useState<string | null>(null);
+  const [fallbackSrcOverride, setFallbackSrcOverride] = React.useState<string | null>(null);
+  const [triedRefresh, setTriedRefresh] = React.useState(false);
+  const currentSrc = srcOverride ?? src;
+  const currentFallbackSrc = fallbackSrcOverride ?? fallbackSrc;
+
+  async function handleImageError() {
+    const logMeta = {
+      ...meta,
+      photoId: photoId ?? meta?.photoId,
+      displayUrl: currentSrc,
+    };
+
+    console.error("Profile photo failed to render", logMeta);
+
+    if (currentSrc && isSignedSupabaseStorageUrl(currentSrc)) {
+      await logFailedImageResponse(currentSrc, logMeta);
+    }
+
+    const refreshId =
+      photoId ?? (typeof meta?.photoId === "string" ? meta.photoId : null);
+
+    if (currentSrc && !triedRefresh && refreshId && isSignedSupabaseStorageUrl(currentSrc)) {
+      setTriedRefresh(true);
+
+      try {
+        const refreshed = await refreshProfilePhotoSignedUrl(refreshId);
+        const refreshedSrc = refreshed.displayUrl ?? refreshed.imageUrl;
+        const refreshedFallbackSrc = refreshed.fallbackUrl ?? refreshed.imageUrl;
+
+        console.log("Profile photo signed URL refreshed after render error", {
+          ...logMeta,
+          refreshedDisplayUrlCreated: !!refreshed.displayUrl,
+          refreshedFullUrlCreated: !!refreshed.imageUrl,
+          refreshedFallbackUrlCreated: !!refreshedFallbackSrc,
+          refreshedPhotoUrlError: refreshed.photoUrlError,
+        });
+
+        if (refreshedSrc) {
+          setFallbackSrcOverride(refreshedFallbackSrc);
+          setSrcOverride(refreshedSrc);
+          return;
+        }
+      } catch (error) {
+        console.error("Profile photo signed URL refresh failed", {
+          ...logMeta,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (currentFallbackSrc && currentSrc !== currentFallbackSrc) {
+      setSrcOverride(currentFallbackSrc);
+      return;
+    }
+
+    setFailed(true);
+  }
+
+  if (!currentSrc || failed) {
+    return (
+      <div
+        className={
+          fallbackClassName ??
+          "flex h-full w-full items-center justify-center text-sm text-slate-500"
+        }
+      >
+        Preview unavailable
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={currentSrc}
+      alt={alt}
+      className={className}
+      onError={() => void handleImageError()}
+    />
+  );
+}
+
+
+
+===== src/components/TopNav.tsx =====
+"use client";
+
+import Link from "next/link";
+import CoachingNavLink from "@/components/coaching/CoachingNavLink";
+import Image from "next/image";
+import { supabaseBrowser } from "@/lib/supabaseBrowser";
+
+type StaffRole = "staff" | "henry" | "admin";
+type NavItem = { href: string; label: string };
+
+const row1: NavItem[] = [
+  { href: "/", label: "Dashboard" },
+  { href: "/users/search", label: "User Search" },
+  { href: "/onboarding", label: "Onboarding" },
+  { href: "/photo-review", label: "Photo Review" },
+  { href: "/library-review", label: "Library Review" },
+   { href: "/session-talks", label: "Session Talks" },
+  { href: "/jobs", label: "Jobs" },
+  { href: "/safety/blocks", label: "User Blocked" },
+  { href: "/henry", label: "Henry Desk" },
+  { href: "/mira", label: "Mira" },
+];
+
+const row2AdminOnly: NavItem[] = [
+  { href: "/staff-applications", label: "Staff Application" },
+  { href: "/admin/staff-access", label: "Staff Access" },
+  { href: "/staff", label: "Staff List" },
+  { href: "/admin/photo-review/team", label: "Photo Review Team" },
+  { href: "/safety", label: "Safety" },
+  { href: "/system", label: "System" },
+  { href: "/admin/profiles-db", label: "Profiles DB" },
+  { href: "/admin/library", label: "Library" },
+  { href: "/admin/audit", label: "Audit Log" },
+  { href: "/photo-review/all-photos-pending", label: "All Photo" },
+];
+
+function NavRow({ items }: { items: NavItem[] }) {
+  return (
+    <nav className="flex flex-wrap gap-2">
+      {items.map((it) => (
+        <Link
+          key={it.href}
+          href={it.href}
+          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+        >
+          {it.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+type TopNavProps = {
+  role: StaffRole;
+  firstName?: string | null;
+  email?: string | null;
+};
+
+export default function TopNav({ role, firstName, email }: TopNavProps) {
+  const showAdminRow = role === "admin";
+
+  const handleLogout = async () => {
+    try {
+      const sb: any =
+        typeof supabaseBrowser === "function"
+          ? (supabaseBrowser as any)()
+          : (supabaseBrowser as any);
+
+      await sb.auth.signOut();
+    } catch (e) {
+      console.error("TopNav logout signOut failed:", e);
+    }
+
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("sb-"))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch (e) {
+      console.error("TopNav logout localStorage clear failed:", e);
+    }
+
+    window.location.assign("/login");
+  };
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-slate-200 bg-slate-100/90 backdrop-blur">
+      <div className="mx-auto max-w-6xl px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Image
+              src="/luvcoachai-logo HeartOnly.png"
+              alt="LuvCoachAI"
+              width={56}
+              height={56}
+              className="h-12 w-auto rounded-md"
+            />
+
+            <div>
+              <div className="text-sm font-semibold text-slate-900">
+                LuvCoachAI Portal
+              </div>
+              <div className="text-xs text-slate-600">
+                Staff Console • Role:{" "}
+                <span className="font-medium text-slate-800">{role}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-slate-700">
+              Hello, {firstName?.trim() || email?.trim() || "staff"}
+              <span className="ml-2 rounded bg-blue-100 px-2 py-1 text-xs text-blue-700">
+                {role}
+              </span>
+            </div>
+
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+              Local Dev
+            </span>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              Log out
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <div className="flex flex-wrap items-start gap-2">
+            <NavRow items={row1} />
+            <CoachingNavLink />
+          </div>
+        </div>
+
+        {showAdminRow && (
+          <div className="mt-2 border-t border-slate-200 pt-2">
+            <NavRow items={row2AdminOnly} />
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
+
+
+===== src/components/Panel.tsx =====
+import * as React from "react";
+import { cn } from "@/lib/cn";
+
+export function Panel({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border p-6",
+        "bg-[var(--panel-bg)] border-[var(--panel-border)]",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
+
+
+===== src/components/ui/PageShell.tsx =====
+import * as React from "react";
+import { cn } from "@/lib/cn";
+
+export function PageShell({
+  title,
+  label,
+  emoji,
+  subtitle,
+  children,
+  className,
+  centeredHeader,
+  wide,
+  
+}: {
+  title?: string;
+  label?: string;
+  emoji?: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  className?: string;
+  centeredHeader?: boolean;
+  wide?: boolean;
+}) {
+  return (
+    <div className={cn("min-h-screen bg-[var(--background)] text-[var(--foreground)]", className)}>
+      <div className="mx-auto w-full max-w-5xl px-4 py-6">
+        {(title || subtitle) && (
+          <div className="mb-6">
+            {title && <h1 className="text-2xl font-semibold">{title}</h1>}
+            {subtitle && <p className="mt-1 text-sm opacity-70">{subtitle}</p>}
+          </div>
+        )}
+
+        {children}
+      </div>
+    </div>
+  );
+}
+
+
+
+===== src/components/ui/Button.tsx =====
+import * as React from "react";
+import { cn } from "@/lib/cn";
+
+export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "ghost";
+};
+
+export function Button({ className, variant = "primary", ...props }: ButtonProps) {
+  const base =
+    "inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed";
+
+  const styles =
+    variant === "ghost"
+      ? "border border-[var(--panel-border)] bg-transparent text-[var(--foreground)] hover:bg-black/5 dark:hover:bg-white/5"
+      : "border border-[var(--btn-border)] bg-[var(--btn-bg)] text-[var(--btn-text)] hover:opacity-50";
+
+  return <button className={cn(base, styles, className)} {...props} />;
+}
+
+
+
+===== src/components/ui/PortalButton.tsx =====
+type PortalButtonProps = {
+  children: React.ReactNode;
+  onClick?: () => void;
+  active?: boolean;
+  disabled?: boolean;
+  className?: string;
+};
+
+export default function PortalButton({
+  children,
+  onClick,
+  active = false,
+  disabled = false,
+  className = "",
+}: PortalButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`
+        w-full rounded-lg border px-3 py-2 text-left text-sm transition
+        ${active ? "bg-blue-500/20 border-blue-400" : "hover:bg-white/5"}
+        ${disabled ? "opacity-40 cursor-not-allowed" : ""}
+        ${className}
+      `}
+    >
+      {children}
+    </button>
+  );
+}
+
+
+===== src/components/ui/Field.tsx =====
+import * as React from "react";
+import { cn } from "@/lib/cn";
+
+export function Field({
+  label,
+  children,
+  hint,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  hint?: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <div className="text-sm font-medium opacity-90">{label}</div>
+      {children}
+      {hint && <div className="text-xs opacity-70">{hint}</div>}
+    </div>
+  );
+}
+
+
+
+===== src/components/ui/Input.tsx =====
+import * as React from "react";
+import { cn } from "@/lib/cn";
+
+export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
+
+export function Input({ className, ...props }: InputProps) {
+  return (
+    <input
+      className={cn(
+        "w-full rounded-lg border px-3 py-2 text-sm outline-none transition",
+        "bg-[var(--input-bg)] text-[var(--input-text)] border-[var(--input-border)]",
+        "placeholder:text-[var(--input-placeholder)]",
+        "focus:ring-2 focus:ring-blue-500/40",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
+
+
+===== src/components/ui/FormRow.tsx =====
+import * as React from "react";
+import { cn } from "@/lib/cn";
+
+export function FormRow({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("grid gap-4 md:grid-cols-3", className)}>{children}</div>
+  );
+}
+
+
+
+===== src/components/ui/FormActions.tsx =====
+import * as React from "react";
+import { cn } from "@/lib/cn";
+
+export function FormActions({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-3 pt-2",
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+
+
+===== src/app/globals.css =====
+@import "tailwindcss";
+
+/*
+ * LuvCoachAI / MiraLuna portal â€” Linen surface refinement, pass 2.
+ * Approved source: MiraLuna_Brand_Guidebook_comp v2 9_11_26.pdf.
+ * Linen surrounds Warm Cream surfaces, as requested by Ami.
+ * Keep these approved colors; do not substitute the alternate Cool Cream.
+ *
+ * Sections:
+ * 1. Brand tokens and font stacks
+ * 2. Tailwind theme and readable text sizes
+ * 3. Document defaults
+ * 4. Shared protected-page shell
+ * 5. Existing TopNav styling bridge
+ * 6. Legacy neutral surfaces and controls
+ * 7. Dashboard
+ * 8. Access states, focus and responsive behavior
+ *
+ * No new package, font download, database change or auth change is required.
+ */
+
+/* 1. Brand tokens and font stacks ---------------------------------------- */
+
+:root {
+  --brand-twilight-blue: #333092;
+  --brand-ember-flame: #F58025;
+  --brand-evergreen-reserve: #2D6B52;
+  --brand-electric-indigo: #7473A9;
+  --brand-warm-cream: #F3EDE9;
+  --brand-parchment: #F7EED4;
+  --brand-linen: #E4DCD6;
+  --brand-midnight-violet: #0F004E;
+  --brand-charcoal: #162731;
+  --brand-slate: #4A4668;
+
+  /*
+   * Use approved faces where they are installed/loaded. No font files or
+   * guessed file paths are supplied. Arial is the EXISTING portal fallback,
+   * not a claimed replacement for the licensed brand typefaces.
+   */
+  --portal-font-body: "Avenir Roman", "Avenir-Roman", "Avenir", Arial,
+    Helvetica, sans-serif;
+  --portal-font-label: "Avenir Black", "Avenir-Black", "Avenir",
+    Arial, Helvetica, sans-serif;
+  --portal-font-heading: "Mencken Standard Regular", "Mencken Standard",
+    var(--portal-font-body);
+  --portal-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+
+  /* 90rem = 1440px with the usual 16px root size; stays zoom-friendly. */
+  --portal-max-width: 90rem;
+  --portal-gutter: clamp(1rem, 2.5vw, 2rem);
+  --portal-radius: 1rem;
+  --portal-shadow: 0 0.25rem 0.9rem rgb(15 0 78 / 8%);
+
+  /* Keep names already used by the shared portal components.
+   * Neutral controls are cream; explicit primary/selected states stay blue. */
+  --background: var(--brand-linen);
+  --foreground: var(--brand-slate);
+  --input-bg: var(--brand-warm-cream);
+  --input-text: var(--brand-charcoal);
+  --input-placeholder: var(--brand-slate);
+  --input-border: var(--brand-electric-indigo);
+  --panel-bg: var(--brand-warm-cream);
+  --panel-border: var(--brand-electric-indigo);
+  --btn-bg: var(--brand-warm-cream);
+  --btn-text: var(--brand-twilight-blue);
+  --btn-border: var(--brand-electric-indigo);
+}
+
+/* 2. Tailwind theme and readable text sizes ------------------------------- */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-input-bg: var(--input-bg);
+  --color-input-text: var(--input-text);
+  --color-input-placeholder: var(--input-placeholder);
+  --color-input-border: var(--input-border);
+  --color-panel-bg: var(--panel-bg);
+  --color-panel-border: var(--panel-border);
+
+  --color-portal-primary: var(--brand-twilight-blue);
+  --color-portal-accent: var(--brand-ember-flame);
+  --color-portal-success: var(--brand-evergreen-reserve);
+  --color-portal-cream: var(--brand-warm-cream);
+  --color-portal-parchment: var(--brand-parchment);
+  --color-portal-linen: var(--brand-linen);
+  --color-portal-text: var(--brand-slate);
+
+  --font-sans: var(--portal-font-body);
+  --font-serif: var(--portal-font-heading);
+  --font-mono: var(--portal-font-mono);
+
+  /*
+   * Existing text-xs/text-sm classes become 16px, not 12/14px.
+   * Change the scale centrally rather than adding page-by-page overrides.
+   * Explicit pixel sizes or CSS-module sizes still need their own review.
+   */
+  --text-xs: 1rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.5;
+  --text-base: 1.125rem;
+  --text-base--line-height: 1.65;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.4;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 1.35;
+  --text-2xl: 2rem;
+  --text-2xl--line-height: 1.2;
+  --text-3xl: 2.5rem;
+  --text-3xl--line-height: 1.15;
+}
+
+/* 3. Document defaults --------------------------------------------------- */
+
+@layer base {
+  html {
+    font-size: 100%;
+    color-scheme: only light;
+  }
+
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--portal-font-body);
+    font-size: 1.125rem;
+    line-height: 1.65;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--input-placeholder);
+    opacity: 1;
+  }
+}
+
+/*
+ * Deliberate single light palette: the previous nested dark-mode rules
+ * mixed blue page backgrounds, dark inputs and light panels. Remove those
+ * conflicting rules rather than layering another theme over them.
+ */
+.portal-body {
+  min-height: 100vh;
+  min-height: 100svh;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* 4. Shared protected-page shell ---------------------------------------- */
+
+.portal-shell {
+  min-height: 100vh;
+  min-height: 100svh;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.portal-content {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--portal-max-width);
+  min-width: 0;
+  margin-inline: auto;
+  padding: 2rem var(--portal-gutter) 4rem;
+}
+
+.portal-content > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 5. Existing TopNav styling bridge ------------------------------------- */
+
+/*
+ * TopNav receives a new logo and shared-brand label in this pass. Its
+ * role filtering, CoachingNavLink and logout logic remain intact. These selectors target
+ * its existing header/nav elements inside our new, explicit wrapper.
+ * Avoid generic rules that would also restyle tabs inside a page.
+ */
+/*
+ * Keep the existing multi-row navigation in document flow for this pass.
+ * At large text sizes, pinning all its rows can obscure the working area.
+ */
+.portal-topbar {
+  position: relative;
+  z-index: 50;
+  background: var(--brand-linen);
+}
+
+.portal-topbar > header {
+  position: static;
+  background: var(--brand-linen);
+  border-bottom: 1px solid var(--brand-electric-indigo);
+  backdrop-filter: none;
+}
+
+.portal-topbar > header > div {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--portal-max-width);
+  margin-inline: auto;
+  padding: 1.25rem var(--portal-gutter);
+}
+
+.portal-topbar header > div > div:first-child {
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.portal-topbar header > div > div:first-child > div {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.portal-topbar header img {
+  width: auto;
+  height: 3.5rem;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+/* Use the entire supplied logo in its original proportions. No cropping,
+ * recoloring, filters or added shadow. The new file is 600 by 529 pixels. */
+.portal-topbar header img.portal-company-logo {
+  width: 7.5rem;
+  max-width: 100%;
+  height: auto;
+  border-radius: 0;
+}
+
+.portal-topbar header > div > div:first-child > .portal-brand-identity {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.portal-brand-copy {
+  min-width: 0;
+}
+
+.portal-brand-context {
+  margin-block: 0.2rem;
+  color: var(--brand-slate);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.portal-topbar header > div > div:first-child > div:first-child > div > div:first-child {
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-label);
+  font-size: 1.25rem;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.portal-topbar nav {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.portal-topbar a,
+.portal-topbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--brand-electric-indigo);
+  border-radius: 0.6rem;
+  font-family: var(--portal-font-label);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow: none;
+}
+
+.portal-topbar a {
+  background: var(--brand-warm-cream);
+  color: var(--brand-twilight-blue);
+}
+
+.portal-topbar a:hover {
+  background: var(--brand-parchment);
+  border-color: var(--brand-twilight-blue);
+}
+
+.portal-topbar button,
+.portal-topbar a[aria-current="page"],
+.portal-shell[data-portal-path="/"] .portal-topbar a[href="/"] {
+  background: var(--brand-twilight-blue);
+  border-color: var(--brand-twilight-blue);
+  color: var(--brand-warm-cream);
+}
+
+.portal-topbar button:hover {
+  background: var(--brand-midnight-violet);
+  border-color: var(--brand-midnight-violet);
+}
+
+/* Role badges stay visible; these rules only recolor their existing style. */
+.portal-topbar .bg-blue-100 {
+  background: var(--brand-warm-cream);
+}
+
+.portal-topbar .text-blue-700 {
+  color: var(--brand-twilight-blue);
+}
+
+/* 6. Legacy neutral surfaces and controls ------------------------------- */
+
+/*
+ * Small, named compatibility bridge for neutral Tailwind styles already
+ * used by the portal. No blanket recoloring of all divs, SVGs or text.
+ * Red/amber/green status styles and CSS-module palettes are not overridden.
+ */
+.portal-shell :where(.bg-white, .bg-slate-50, .bg-slate-100) {
+  background-color: var(--brand-warm-cream);
+}
+
+.portal-shell :where(.border-slate-200, .border-gray-200) {
+  border-color: var(--brand-linen);
+}
+
+.portal-shell :where(.text-slate-500, .text-slate-600, .text-slate-700) {
+  color: var(--brand-slate);
+}
+
+.portal-shell :where(.text-slate-800, .text-slate-900) {
+  color: var(--brand-charcoal);
+}
+
+.portal-content :where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]),
+  select,
+  textarea
+) {
+  min-height: 2.75rem;
+  font-size: max(1.125rem, 1em);
+  line-height: 1.5;
+}
+
+.portal-content :where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--brand-twilight-blue);
+}
+
+.portal-content :where(button, [role="button"]) {
+  min-height: 2.75rem;
+  font-size: max(1rem, 1em);
+  line-height: 1.4;
+}
+
+/* 7. Dashboard ---------------------------------------------------------- */
+
+.portal-dashboard {
+  display: grid;
+  gap: 2rem;
+  min-width: 0;
+}
+
+.portal-dashboard-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 1fr);
+  gap: clamp(1.25rem, 3vw, 3rem);
+  align-items: stretch;
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  background: var(--brand-warm-cream);
+  border: 1px solid var(--brand-electric-indigo);
+  border-radius: var(--portal-radius);
+  box-shadow: var(--portal-shadow);
+}
+
+.portal-dashboard-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  padding: 0;
+}
+
+.portal-eyebrow {
+  margin: 0 0 0.75rem;
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-label);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.portal-dashboard h1 {
+  max-width: 18ch;
+  margin: 0;
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-heading);
+  font-size: clamp(2rem, 1.25rem + 2vw, 3rem);
+  font-weight: 400;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+
+/* One small Ember Flame accent, rather than repeated orange controls. */
+.portal-brand-rule {
+  display: block;
+  width: 3.5rem;
+  height: 0.2rem;
+  margin-block: 1.5rem;
+  background: var(--brand-ember-flame);
+}
+
+.portal-dashboard-lead {
+  max-width: 48ch;
+  margin: 0;
+  color: var(--brand-slate);
+  font-size: 1.25rem;
+  line-height: 1.65;
+}
+
+.portal-welcome-note {
+  min-width: 0;
+  padding: 1.75rem;
+  background: var(--brand-parchment);
+  border: 1px solid var(--brand-electric-indigo);
+  border-radius: var(--portal-radius);
+}
+
+
+.portal-dashboard h2,
+.portal-dashboard h3 {
+  margin: 0;
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-label);
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  line-height: 1.35;
+}
+
+.portal-dashboard h2 {
+  font-size: 1.5rem;
+}
+
+.portal-dashboard h3 {
+  font-size: 1.375rem;
+}
+
+.portal-welcome-note p {
+  margin: 0.75rem 0 0;
+  color: var(--brand-slate);
+  font-size: 1.125rem;
+  line-height: 1.65;
+}
+
+.portal-section-heading {
+  margin-bottom: 1.25rem;
+}
+
+.portal-section-heading p {
+  margin: 0.5rem 0 0;
+  color: var(--brand-slate);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.portal-work-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.portal-work-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 1.5rem;
+  background: var(--brand-warm-cream);
+  border: 1px solid var(--brand-electric-indigo);
+  border-radius: var(--portal-radius);
+  color: var(--brand-slate);
+  text-decoration: none;
+  box-shadow: var(--portal-shadow);
+  overflow-wrap: anywhere;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.portal-work-card:hover {
+  background: var(--brand-parchment);
+  border-color: var(--brand-twilight-blue);
+}
+
+.portal-work-card p {
+  margin: 0.75rem 0 1.25rem;
+  color: var(--brand-slate);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.portal-work-card-action {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-top: auto;
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-label);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.5;
+}
+
+/* 8. Access states, focus and responsive behavior ----------------------- */
+
+.portal-access-screen {
+  display: grid;
+  min-height: 100vh;
+  min-height: 100svh;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.portal-access-card {
+  width: 100%;
+  max-width: 36rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  background: var(--brand-warm-cream);
+  border: 1px solid var(--brand-linen);
+  border-radius: var(--portal-radius);
+  box-shadow: var(--portal-shadow);
+}
+
+.portal-access-card h1 {
+  margin: 0 0 1rem;
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-heading);
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.portal-access-card p:not(.portal-eyebrow) {
+  margin: 0 0 1rem;
+  color: var(--brand-slate);
+  font-size: 1.125rem;
+  overflow-wrap: anywhere;
+}
+
+.portal-primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--brand-twilight-blue);
+  border: 1px solid var(--brand-twilight-blue);
+  border-radius: 0.6rem;
+  color: var(--brand-warm-cream);
+  font-family: var(--portal-font-label);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.portal-primary-button:hover {
+  background: var(--brand-midnight-violet);
+}
+
+.portal-shell :where(a, button, input, select, textarea, summary):focus-visible,
+.portal-access-screen :where(a, button):focus-visible {
+  outline: 3px solid var(--brand-twilight-blue);
+  outline-offset: 3px;
+}
+
+.portal-skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  max-width: calc(100% - 1.5rem);
+  padding: 0.75rem 1rem;
+  background: var(--brand-twilight-blue);
+  border: 2px solid var(--brand-warm-cream);
+  border-radius: 0.5rem;
+  color: var(--brand-warm-cream);
+  font-size: 1rem;
+  transform: translateY(-200%);
+}
+
+.portal-skip-link:focus {
+  transform: translateY(0);
+}
+
+@media (max-width: 60rem) {
+  .portal-dashboard-intro {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .portal-dashboard-welcome {
+    padding-inline: 0;
+  }
+}
+
+@media (max-width: 42rem) {
+  .portal-content {
+    padding-top: 1.25rem;
+  }
+
+  .portal-topbar header > div > div:first-child {
+    align-items: flex-start;
+  }
+
+  .portal-work-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .portal-welcome-note,
+  .portal-work-card {
+    padding: 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-work-card {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .portal-work-card,
+  .portal-topbar a,
+  .portal-topbar button {
+    border-color: ButtonText;
+  }
+
+  .portal-shell :where(a, button, input, select, textarea, summary):focus-visible {
+    outline-color: Highlight;
+  }
+}

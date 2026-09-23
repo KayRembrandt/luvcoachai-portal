@@ -1,0 +1,185 @@
+/* Explicit header classes override the older global navigation bridge only
+ * within this component. Existing routes, permissions and logout are retained. */
+
+.header.header {
+  position: static;
+  background: var(--brand-warm-cream, #F3EDE9);
+  border-bottom: 1px solid var(--brand-linen, #E4DCD6);
+  color: var(--brand-slate, #4A4668);
+  box-shadow: 0 0.2rem 0.7rem rgb(15 0 78 / 4%);
+  backdrop-filter: none;
+}
+
+.header.header > .container {
+  width: 100%;
+  max-width: var(--portal-max-width, 90rem);
+  padding: 1rem var(--portal-gutter, 2rem) 1.25rem;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
+.header.header .identityRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+}
+
+.header.header .identity {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.header.header .logo {
+  width: 6.25rem;
+  height: auto;
+  max-width: 100%;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 0;
+}
+
+.header.header .brandCopy {
+  min-width: 0;
+}
+
+.header.header .portalTitle {
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-label);
+  font-size: 1.5rem;
+  font-weight: 900;
+  line-height: 1.3;
+}
+
+.header.header .brandCopy p {
+  margin: 0.2rem 0 0;
+  color: var(--brand-slate);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.header.header .account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 1rem;
+}
+
+.header.header .role,
+.header.header .environment {
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--brand-linen);
+  border-radius: 0.6rem;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.header.header .role {
+  background: color-mix(in srgb, var(--brand-electric-indigo) 15%, var(--brand-warm-cream));
+  color: var(--brand-twilight-blue);
+}
+
+.header.header .environment {
+  background: var(--brand-warm-cream);
+}
+
+.header.header .primaryNav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.header.header .adminNav {
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--brand-linen);
+}
+
+.header.header .navRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.header.header .navLink,
+.header.header .coaching :global(a),
+.header.header .coachingSelected :global(a),
+.header.header .logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 2.85rem;
+  max-width: 100%;
+  padding: 0.65rem 0.4rem;
+  border: 1px solid var(--brand-electric-indigo);
+  border-radius: 0.65rem;
+  background: var(--brand-warm-cream);
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-label);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: 0 0.1rem 0.3rem rgb(15 0 78 / 6%);
+}
+
+.header.header .navLink svg,
+.header.header .logout svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: 0 0 auto;
+}
+
+.header.header .navLink:hover,
+.header.header .coaching :global(a:hover) {
+  background: var(--brand-parchment);
+  border-color: var(--brand-twilight-blue);
+}
+
+.header.header .navLink[aria-current="page"],
+.header.header .coachingSelected :global(a),
+.header.header .logout {
+  background: var(--brand-twilight-blue);
+  border-color: var(--brand-twilight-blue);
+  color: var(--brand-warm-cream);
+}
+
+.header.header .logout:hover {
+  background: var(--brand-midnight-violet);
+}
+
+.header.header :is(a, button):focus-visible {
+  outline: 3px solid var(--brand-twilight-blue);
+  outline-offset: 3px;
+}
+
+@media (max-width: 42rem) {
+  .header.header .logo {
+    width: 5rem;
+  }
+  .header.header .identity {
+    gap: 0.75rem;
+  }
+  .header.header .portalTitle {
+    font-size: 1.25rem;
+  }
+  .header.header .account {
+    justify-content: flex-start;
+    width: 100%;
+  }
+  .header.header .navRow {
+    width: 100%;
+  }
+  .header.header .navLink {
+    flex: 1 1 9rem;
+  }
+}

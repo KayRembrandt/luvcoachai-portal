@@ -1,0 +1,516 @@
+/*
+ * Coaching workspace: readability update.
+ * Replace src/components/coaching/workspace.module.css with this file.
+ *
+ * Same CSS-module class names and existing green/white palette.
+ * Does not change data, authentication, permissions, or saving behavior.
+ *
+ * Body and editable text: at least 18px.
+ * Supporting text, labels, buttons, and tables: at least 16px.
+ * rem values also allow a larger root font preference to increase the text.
+ * The portal-wide navigation and other pages are not styled by this file.
+ */
+
+/* Main workspace and headings */
+
+.workspace {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 28px 24px 64px;
+  color: #233132;
+  font-size: max(18px, 1.125rem);
+  line-height: 1.6;
+}
+
+.workspace h1 {
+  font-size: max(32px, 2rem);
+  line-height: 1.2;
+  font-weight: 700;
+  margin: 4px 0 10px;
+}
+
+.workspace h2 {
+  font-size: max(24px, 1.5rem);
+  font-weight: 650;
+  margin: 0 0 12px;
+}
+
+.workspace h3 {
+  font-size: max(20px, 1.25rem);
+  font-weight: 650;
+  margin: 0 0 10px;
+}
+
+/* Header and supporting copy */
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+.eyebrow {
+  font-size: max(16px, 1rem);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #f58025;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.muted {
+  color: fbaf5f;
+  font-size: max(16px, 1rem);
+  margin: 6px 0 12px;
+}
+
+.footnote {
+  font-size: max(16px, 1rem);
+  line-height: 1.6;
+  color: #fbaf5f;
+  margin-top: 30px;
+  border-top: 1px solid #d8e1df;
+  padding-top: 16px;
+}
+
+/* Panels and layout */
+
+.card,
+.sidebar,
+.editor,
+.empty {
+  border: 1px solid #d8e1df;
+  border-radius: 14px;
+  background: #fff;
+  padding: 22px;
+  min-width: 0;
+}
+
+.card {
+  margin-bottom: 18px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(235px, 310px) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.sidebar {
+  padding: 18px;
+}
+
+.editor {
+  padding: 24px;
+  min-height: 420px;
+}
+
+.empty {
+  background: #f7faf9;
+  border-style: dashed;
+  border-color: #fbaf5f;
+  color: #435b56;
+  padding: 36px;
+  line-height: 1.7;
+}
+
+/* Workspace tabs and actions */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 22px 0;
+}
+
+.tab,
+.activeTab {
+  font-size: max(16px, 1rem);
+  line-height: 1.5;
+  min-height: 44px;
+  border: 1px solid #cbd8d3;
+  border-radius: 9px;
+  padding: 10px 18px;
+  font-weight: 600;
+  background: #fff;
+  color: #f58025;
+}
+
+.activeTab {
+  background: 
+#f58025;
+  color: #fff;
+  border-color: 
+#fbaf5f;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.button,
+.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid 
+#fbaf5f;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #f58025;
+  font-size: max(16px, 1rem);
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+  white-space: normal;
+}
+
+.primary {
+  background: 
+#f58025;
+  border-color: 
+#fbaf5f;
+  color: #fff;
+}
+
+.button:hover {
+  background: #eff6f2;
+}
+
+.primary:hover {
+  background: 
+#fbaf5f49;
+}
+
+.workspace button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.workspace button:focus-visible,
+.workspace input:focus-visible,
+.workspace textarea:focus-visible,
+.workspace select:focus-visible,
+.workspace a:focus-visible {
+  outline: 3px solid #627ddc;
+  outline-offset: 2px;
+}
+
+/* Input labels and editing controls */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0;
+  min-width: 0;
+  width: 100%;
+  font-size: max(16px, 1rem);
+  color: 
+#fbaf5f;
+  font-weight: 600;
+}
+
+.field input,
+.field textarea,
+.field select,
+.preview textarea {
+  font: inherit;
+  font-size: max(18px, 1.125rem);
+  font-weight: 400;
+  color: #233132;
+  background: #fff;
+  border: 1px solid #bdcbc7;
+  border-radius: 7px;
+  padding: 9px 11px;
+  width: 100%;
+  min-height: 48px;
+}
+
+.field textarea {
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.field input[type="file"] {
+  font-size: max(16px, 1rem);
+  padding: 10px;
+}
+
+.field select {
+  max-width: 100%;
+}
+
+.twoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.split {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.split > .field {
+  flex: 1;
+  min-width: 180px;
+}
+
+.section {
+  border-top: 1px solid #dfe8e3;
+  margin-top: 25px;
+  padding-top: 22px;
+}
+
+.subcard {
+  border: 1px solid #dfe5e2;
+  background: #f8faf9;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 14px 0;
+}
+
+.form {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.form:disabled {
+  opacity: .75;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: max(16px, 1rem);
+  margin-top: 13px;
+}
+
+.check input {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  margin-top: 2px;
+}
+
+/* Module and workbook lists */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.listItem,
+.selectedItem {
+  font-size: max(18px, 1.125rem);
+  line-height: 1.5;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid #dae3df;
+  background: #fff;
+  border-radius: 8px;
+  color: #30443a;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.selectedItem {
+  background: #edf6f0;
+  border-color: #7aa28d;
+}
+
+.listItem small,
+.selectedItem small {
+  font-size: max(16px, 1rem);
+  color: #475653;
+}
+
+/* Editor toolbar and feedback */
+
+.toolbar {
+  border-bottom: 1px solid #dae3df;
+  padding-bottom: 18px;
+  margin-bottom: 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.toolbar strong {
+  font-size: max(20px, 1.25rem);
+}
+
+.error,
+.notice,
+.saved {
+  padding: 13px 16px;
+  border-radius: 9px;
+  margin: 12px 0;
+  font-size: max(16px, 1rem);
+  overflow-wrap: anywhere;
+}
+
+.error {
+  background: #fff1f0;
+  border: 1px solid #eac1bc;
+  color: #80372e;
+}
+
+.error .actions {
+  margin-top: 12px;
+}
+
+.notice {
+  background: #fff8e7;
+  border: 1px solid #e8d7a3;
+  color: #6b551a;
+}
+
+.saved {
+  background: #edf7f0;
+  border: 1px solid #b7d4bf;
+  color: #285c37;
+}
+
+/* Author preview */
+
+.preview {
+  padding: 20px 10px;
+}
+
+.preview h2 {
+  font-size: max(28px, 1.75rem);
+}
+
+.preview h3 {
+  margin-top: 20px;
+}
+
+.prose {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 16px 0;
+  line-height: 1.8;
+}
+
+.preview ul {
+  list-style: disc;
+  margin: 14px 0;
+  padding-left: 24px;
+}
+
+.preview a {
+  text-decoration: underline;
+  color: #315e50;
+}
+
+.preview details {
+  margin: 16px 0;
+}
+
+.preview summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.audio {
+  display: block;
+  width: 100%;
+  margin: 14px 0;
+}
+
+/* Access table */
+
+.tableWrap {
+  overflow: auto;
+  margin-top: 20px;
+}
+
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tableWrap th,
+.tableWrap td {
+  border-bottom: 1px solid #d9e4de;
+  text-align: left;
+  padding: 12px;
+  font-size: max(16px, 1rem);
+}
+
+.tableWrap th {
+  color: #486050;
+  background: #f4f8f5;
+}
+
+/* Responsive layout */
+
+@media (max-width: 1000px) {
+  .layout {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+  .twoCol {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .editor {
+    padding: 18px;
+  }
+  .toolbar {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace {
+    padding: 20px 14px 40px;
+  }
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    max-height: 440px;
+    overflow: auto;
+  }
+  .workspace h1 {
+    font-size: max(28px, 1.75rem);
+  }
+  .split {
+    align-items: stretch;
+  }
+  .split > .field {
+    min-width: 100%;
+  }
+  .empty {
+    padding: 24px;
+  }
+  .actions {
+    gap: 6px;
+  }
+.button,
+.primary {
+    min-height: 48px;
+  }
+}

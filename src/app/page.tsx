@@ -1,72 +1,93 @@
-import { Panel } from "@/components/Panel"
-import Image from "next/image";
-// app/page.tsx
+// src/app/page.tsx
+import Link from "next/link";
+
+// Four shortcuts to existing sections in the visible staff navigation.
+// Jobs and Mira remain hidden until those tools are implemented.
+// This list does not grant access; each destination must enforce its own permissions.
+const workAreas = [
+  {
+    title: "User Search",
+    description: "Look up a user by real first name, last name, or email.",
+    href: "/users/search",
+  },
+  {
+    title: "Photo Review",
+    description: "Open the photo review queue and review member photos.",
+    href: "/photo-review",
+  },
+  {
+    title: "Henry Desk",
+    description: "Staff support guidance and Henry-created work context.",
+    href: "/henry",
+  },
+  {
+    title: "Library Review",
+    description: "Organize Journey categories and edit lesson material.",
+    href: "/library-review",
+  },
+] as const;
 
 export default function DashboardPage() {
+  // No outer Panel: Linen remains visible between the separate cream surfaces.
   return (
-    <Panel>
-    <div className="space-y-6">
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Dashboard
+    <div className="portal-dashboard">
+      <section
+        className="portal-dashboard-intro"
+        aria-labelledby="dashboard-title"
+      >
+        <div className="portal-dashboard-welcome">
+          <p className="portal-eyebrow">Dashboard</p>
+          <h1 id="dashboard-title">Welcome to the Staff Portal</h1>
+          <span className="portal-brand-rule" aria-hidden="true" />
+          <p className="portal-dashboard-lead">
+            This is a focused workspace for support, review, and operations.
+            Choose a section above to begin.
+          </p>
         </div>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">
-          Welcome to the Staff Portal
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          This is a focused workspace for support, review, and operations. Choose a
-          section above to begin.
-        </p>
-      </div>
-      
-  <div className="flex flex-col items-center text-center mb-12">
-          {/* 🔹 Update this src to your new logo path */}
-          <img
-            src="/luvcoachai-logo.png"
-            alt="LuvCoachAI logo"
-            width={160}
-            height={160}
-            className="mb-3 rounded-2xl"
-          />
-          <h2 className="text-lg font-semibold text-[#0F1B33]">
-              Glad you're here. 👋
-            </h2>
-            <p className="mt-2 text-[15px]] text-[#4A5878] max-w-xs">
-                Today is a new favorite day to help you support our users and keep LuvCoachAI running smoothly. 
-                If you need anything, just ask Henry! If he can't help you, you can always reach out to me.
-        </p>
 
+        <aside
+          className="portal-welcome-note"
+          aria-labelledby="welcome-note-title"
+        >
+          <h2 id="welcome-note-title">Glad you’re here. 👋</h2>
+          <p>
+            Today is a new favorite day to help you support our users and keep
+            LuvCoachAI and MiraLuna running smoothly.
+          </p>
+          <p>
+            If you need anything, just ask Henry! If he can’t help you, you can
+            always reach out to me.
+          </p>
+        </aside>
+      </section>
+
+      <section
+        className="portal-work-areas"
+        aria-labelledby="work-areas-title"
+      >
+        <div className="portal-section-heading">
+          <h2 id="work-areas-title">Your workspace</h2>
+          <p>Choose the area you need for the task in front of you.</p>
         </div>
-        
-      <div className="grid gap-4 md:grid-cols-2">
-        {[
-          {
-            title: "User Search",
-            desc: "Look up a user by real first name, last name, or email.",
-          },
-          {
-            title: "Jobs",
-            desc: "Work queue for reviews, escalations, and resolutions.",
-          },
-          {
-            title: "Henry Desk",
-            desc: "Staff support guidance and Henry-created work context.",
-          },
-          {
-            title: "Mira",
-            desc: "Quality review and misuse detection (read-heavy, action-light).",
-          },
-        ].map((c) => (
-          <div
-            key={c.title}
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <div className="text-lg font-semibold">{c.title}</div>
-            <div className="mt-1 text-sm text-slate-600">{c.desc}</div>
-          </div>
-        ))}
-      </div>
+
+        <div className="portal-work-grid">
+          {workAreas.map((area) => (
+            <Link
+              key={area.href}
+              href={area.href}
+              prefetch={false}
+              className="portal-work-card"
+            >
+              <h3>{area.title}</h3>
+              <p>{area.description}</p>
+              <span className="portal-work-card-action">
+                Open {area.title}
+                <span aria-hidden="true">→</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
     </div>
-    </Panel>
   );
 }

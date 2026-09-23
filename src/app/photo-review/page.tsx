@@ -1,6 +1,9 @@
 "use client";
-
 import React from "react";
+import Link from "next/link";
+import { PortalIcon } from "@/components/portal/PortalIcon";
+import { EmptyState, InitialsBadge, ReviewHeader } from "@/components/portal/ReviewUI";
+import styles from "@/components/portal/review.module.css";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
@@ -18,7 +21,6 @@ type PendingUserRow = {
   approved_count: number;
   oldest_pending_at: string | null;
   newest_pending_at: string | null;
-
   // The API should return this for every user, including approved-only users.
   // The fallbacks below keep the page compatible with the older response.
   latest_photo_at?: string | null;
@@ -40,35 +42,29 @@ type PaginationState = {
 type LoadOptions = {
   silent?: boolean;
 };
-
 const PAGE_SIZE = 25;
 
 function calcAge(dob: string | null) {
   if (!dob) return null;
   const d = new Date(dob);
   if (Number.isNaN(d.getTime())) return null;
-
   const now = new Date();
   let age = now.getFullYear() - d.getFullYear();
   const monthDiff = now.getMonth() - d.getMonth();
-
   if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < d.getDate())) {
     age -= 1;
   }
-
   return age;
 }
 
 function asFiniteNumber(...values: unknown[]) {
   for (const value of values) {
     if (typeof value === "number" && Number.isFinite(value)) return value;
-
     if (typeof value === "string" && value.trim()) {
       const parsed = Number(value);
       if (Number.isFinite(parsed)) return parsed;
     }
   }
-
   return null;
 }
 
@@ -78,7 +74,6 @@ function asBoolean(...values: unknown[]) {
     if (value === "true") return true;
     if (value === "false") return false;
   }
-
   return null;
 }
 
@@ -102,9 +97,7 @@ function sortNewestFirst(rows: PendingUserRow[]) {
   return [...rows].sort((a, b) => {
     const dateDifference =
       getTimestamp(getMostRecentAt(b)) - getTimestamp(getMostRecentAt(a));
-
     if (dateDifference !== 0) return dateDifference;
-
     const aName = a.display_name ?? a.screen_name ?? a.user_id;
     const bName = b.display_name ?? b.screen_name ?? b.user_id;
     return aName.localeCompare(bName);
@@ -118,7 +111,6 @@ function errorMessage(error: unknown, fallback: string) {
 
 export default function PhotoReviewPage() {
   const router = useRouter();
-
   const [rows, setRows] = React.useState<PendingUserRow[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -131,28 +123,22 @@ export default function PhotoReviewPage() {
   });
   const [notificationSummary, setNotificationSummary] =
     React.useState<NotificationSummary | null>(null);
-
   const activeRequestRef = React.useRef<AbortController | null>(null);
-
   const load = React.useCallback(
     async (options: LoadOptions = {}) => {
       const silent = options.silent === true;
       const controller = new AbortController();
-
       activeRequestRef.current?.abort();
       activeRequestRef.current = controller;
-
       if (!silent) {
         setLoading(true);
         setError(null);
       }
-
       try {
         const {
           data: { session },
           error: sessionError,
         } = await supabaseBrowser.auth.getSession();
-
         if (sessionError) {
           console.error("PhotoReviewPage getSession error:", sessionError);
           setError(sessionError.message || "Could not verify your session.");
@@ -160,9 +146,7 @@ export default function PhotoReviewPage() {
           setPagination({ total: null, hasNext: false });
           return;
         }
-
         const token = session?.access_token ?? null;
-
         if (!token) {
           console.error("PhotoReviewPage: no access token found.");
           setError("Not logged in.");
@@ -170,7 +154,6 @@ export default function PhotoReviewPage() {
           setPagination({ total: null, hasNext: false });
           return;
         }
-
         const offset = (page - 1) * PAGE_SIZE;
         const params = new URLSearchParams({
           status: statusFilter,
@@ -181,13 +164,11 @@ export default function PhotoReviewPage() {
           sort: "latest_photo_at",
           order: "desc",
         });
-
         // "All" should mean every user with a non-archived profile photo,
         // including users whose photos are all approved.
         if (statusFilter === "all") {
           params.set("includeApprovedOnly", "true");
         }
-
         const res = await fetch(`/api/photos/pending-users?${params}`, {
           method: "GET",
           headers: {
@@ -196,7 +177,6 @@ export default function PhotoReviewPage() {
           cache: "no-store",
           signal: controller.signal,
         });
-
         const json = await res.json().catch(() => ({}));
         const rawRows = Array.isArray(json?.rows)
           ? json.rows
@@ -222,26 +202,22 @@ export default function PhotoReviewPage() {
           (total !== null
             ? offset + nextRows.length < total
             : nextRows.length === PAGE_SIZE);
-
         console.log("PhotoReviewPage pending-users response:", res.status, {
           ...json,
           rows: `[${nextRows.length} rows]`,
         });
-
         if (!res.ok) {
           setError(json?.error ?? `Failed to load (${res.status})`);
           setRows(nextRows);
           setPagination({ total, hasNext });
           return;
         }
-
         // This fallback sort fixes an older API response that arrived oldest-first.
         // The API must also sort before applying OFFSET/LIMIT so pagination is
         // globally newest-first, not merely newest-first inside each page.
         setRows(nextRows);
         setPagination({ total, hasNext });
         setError(null);
-
         const {
           count,
           data: notificationRows,
@@ -252,7 +228,6 @@ export default function PhotoReviewPage() {
           .eq("status", "unread")
           .order("created_at", { ascending: false })
           .limit(1);
-
         if (notificationError) {
           // Do not break the queue if this table or its RLS policy is not deployed.
           console.warn(
@@ -273,7 +248,6 @@ export default function PhotoReviewPage() {
         ) {
           return;
         }
-
         if (
           errorMessage(loadError, "")
             .toLowerCase()
@@ -281,7 +255,6 @@ export default function PhotoReviewPage() {
         ) {
           return;
         }
-
         console.error("PhotoReviewPage load failed:", loadError);
         setError(
           errorMessage(
@@ -298,34 +271,28 @@ export default function PhotoReviewPage() {
     },
     [page, statusFilter],
   );
-
   React.useEffect(() => {
     void load();
-
     // Staff can leave the queue open and still see fresh uploads.
     const intervalId = window.setInterval(() => {
       void load({ silent: true });
     }, 30_000);
-
     return () => {
       window.clearInterval(intervalId);
       activeRequestRef.current?.abort();
     };
   }, [load]);
-
   function changeFilter(nextFilter: QueueFilter) {
     if (nextFilter === statusFilter) return;
     setPage(1);
     setStatusFilter(nextFilter);
   }
-
   function getAwaitingCount(row: PendingUserRow) {
     if (statusFilter === "needs_attention") return row.needs_attention_count;
     if (statusFilter === "rejected") return row.rejected_count;
     if (statusFilter === "pending") return row.pending_count;
     return row.pending_count + row.needs_attention_count + row.rejected_count;
   }
-
   const unreadNotificationCount = notificationSummary?.unreadCount ?? 0;
   const totalPages =
     pagination.total !== null
@@ -345,184 +312,215 @@ export default function PhotoReviewPage() {
     statusFilter === "all"
       ? "All users with profile photos"
       : "Queue of users with photos awaiting review";
-
   return (
-    <div className="p-6">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-[#0F1B33]">
-            Photo Review
-          </h1>
-          <p className="mt-1 text-sm text-gray-600">
-            {queueDescription} • {visibleCountLabel}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? "Loading…" : "Refresh"}
-        </button>
-      </div>
-
-      {unreadNotificationCount > 0 && (
-        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <div className="font-semibold">🔔 Photo review alert</div>
-          <div className="mt-1">
-            {unreadNotificationCount} uploaded{" "}
-            {unreadNotificationCount === 1 ? "photo needs" : "photos need"}{" "}
-            staff review
-            {notificationSummary?.newestAt
-              ? ` • Latest upload ${new Date(notificationSummary.newestAt).toLocaleString()}`
-              : ""}
+    <div className={styles.page}>
+      <ReviewHeader
+        title="Photo Review"
+        icon="photo"
+        description={<>{queueDescription} • {visibleCountLabel}</>}
+        action={
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className={styles.button}
+          >
+            <PortalIcon name="refresh" />
+            {loading ? "Loading…" : "Refresh"}
+          </button>
+        }
+      />
+      <section className={styles.panel} aria-label="Photo review queue">
+        {unreadNotificationCount > 0 && (
+          <div className={styles.notice} role="status">
+            <PortalIcon name="bell" />
+            <div>
+              <strong>Photo review alert</strong>
+              <p>{unreadNotificationCount} uploaded {unreadNotificationCount === 1 ? "photo needs" : "photos need"} staff review
+                {notificationSummary?.newestAt ? ` • Latest upload ${new Date(notificationSummary.newestAt).toLocaleString()}` : ""}
+              </p>
+            </div>
           </div>
-        </div>
-      )}
-
-      {error && (
-        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      <div className="my-4 flex flex-wrap gap-2">
-        {[
-          { key: "pending", label: "Pending" },
-          { key: "needs_attention", label: "Needs Attention" },
-          { key: "rejected", label: "Rejected" },
-          { key: "all", label: "All" },
-        ].map((item) => {
-          const active = statusFilter === item.key;
-
-          return (
+        )}
+        <div
+          className={styles.filters}
+          role="group"
+          aria-label="Filter photo review queue"
+        >
+          {[
+            {
+              key: "pending",
+              label: "Pending",
+              icon: "clock"
+            },
+            {
+              key: "needs_attention",
+              label: "Needs Attention",
+              icon: "alert"
+            },
+            {
+              key: "rejected",
+              label: "Rejected",
+              icon: "close"
+            },
+            {
+              key: "all",
+              label: "All",
+              icon: "photo"
+            },
+          ].map((item) => (
             <button
               key={item.key}
               type="button"
               onClick={() => changeFilter(item.key as QueueFilter)}
-              className={[
-                "rounded-full border px-4 py-2 text-sm transition",
-                active
-                  ? "border-blue-600 bg-blue-600 text-white"
-                  : "bg-white text-black hover:bg-gray-50",
-              ].join(" ")}
+              aria-pressed={statusFilter === item.key}
+              className={styles.filter}
             >
+              <PortalIcon name={item.icon as "clock" | "alert" | "close" | "photo"} />
               {item.label}
             </button>
-          );
-        })}
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border bg-white">
-        <div className="grid grid-cols-12 gap-2 border-b bg-gray-50 px-4 py-3 text-xs font-semibold text-gray-600">
-          <div className="col-span-4">User</div>
-          <div className="col-span-2">Age / Gender</div>
-          <div className="col-span-2">Tier / Status</div>
-          <div className="col-span-2">Awaiting / Approved</div>
-          <div className="col-span-2">Most Recent ↓</div>
+          ))}
         </div>
-
-        {loading ? (
-          <div className="p-6 text-sm text-gray-600">Loading…</div>
-        ) : rows.length === 0 ? (
-          <div className="p-6 text-sm text-gray-600">
-            {statusFilter === "all"
-              ? "No users with profile photos were found."
-              : "Nothing in this queue right now 🎉"}
-          </div>
-        ) : (
-          rows.map((row) => {
-            const age = calcAge(row.date_of_birth);
-            const name = row.display_name ?? row.screen_name ?? "—";
-            const gender = row.gender_identity ?? "—";
-            const tier = row.tier ?? "—";
-            const status = row.status ?? "—";
-            const awaiting = getAwaitingCount(row);
-            const mostRecentAt = getMostRecentAt(row);
-
-            return (
-              <button
-                key={row.user_id}
-                type="button"
-                onClick={() => router.push(`/users/${row.user_id}?tab=photos`)}
-                className="grid w-full grid-cols-12 gap-2 border-b px-4 py-3 text-left hover:bg-gray-50"
-              >
-                <div className="col-span-4">
-                  <div className="text-sm font-medium text-gray-900">
-                    {name}
-                  </div>
-                  <div className="text-xs text-gray-500">{row.user_id}</div>
-                </div>
-
-                <div className="col-span-2 text-sm text-gray-800">
-                  {age != null ? age : "—"} / {gender}
-                </div>
-
-                <div className="col-span-2 text-sm text-gray-800">
-                  {tier} / {status}
-                </div>
-
-                <div className="col-span-2 text-sm text-gray-800">
-                  <span className="font-semibold">{awaiting}</span> /{" "}
-                  {row.approved_count}
-                </div>
-
-                <div className="col-span-2 text-sm text-gray-800">
-                  {mostRecentAt
-                    ? new Date(mostRecentAt).toLocaleString()
-                    : "—"}
-                </div>
-              </button>
-            );
-          })
-        )}
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-gray-500">
-          {rows.length > 0 ? (
-            <>
-              Showing {firstVisible}–{lastVisible}
-              {pagination.total !== null ? ` of ${pagination.total}` : ""} •
-              newest photos first
-            </>
-          ) : (
-            "Newest photos appear first."
-          )}
-        </p>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
-            disabled={!canGoPrevious}
-            className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Previous
-          </button>
-
-          <span className="min-w-24 text-center text-sm text-gray-600">
-            Page {page}
-            {totalPages !== null ? ` of ${totalPages}` : ""}
+        {error && <div className={styles.errorBox} role="alert">
+          <PortalIcon name="alert" />
+          <span>
+            {error}
           </span>
-
-          <button
-            type="button"
-            onClick={() => setPage((current) => current + 1)}
-            disabled={!canGoNext}
-            className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Next
-          </button>
+        </div>}
+        <div className={styles.queueSummary}>
+          <h2 id="photo-queue-title">
+            {statusFilter === "all"
+              ? "All profile photos"
+              : statusFilter === "needs_attention"
+                ? "Needs attention"
+                : statusFilter === "rejected"
+                  ? "Rejected photos"
+                  : "Pending review"}
+          </h2>
+          <span className={styles.resultCount} role="status">
+            {loading ? "Loading…" : visibleCountLabel}
+          </span>
         </div>
-      </div>
-
-      <p className="mt-3 text-xs text-gray-500">
-        Clicking a row opens the full User 360 page on the Photos tab so staff
-        can review context before making a decision.
-      </p>
+        {loading ? (
+          <EmptyState title="Loading the photo queue" icon="photo">Please wait while the latest records are retrieved.</EmptyState>
+        ) : rows.length === 0 ? (
+          <EmptyState
+            title={error ? "Queue unavailable" : statusFilter === "all" ? "No profile photos found" : "Nothing in this queue right now"}
+            icon={error ? "alert" : "photo"}
+          >
+            {error ? "Check the message above, then refresh the queue." : "Choose another filter or refresh to check again."}
+          </EmptyState>
+        ) : (
+          <div
+            className={styles.tableScroll}
+            tabIndex={0}
+            role="region"
+            aria-label="Photo queue; scroll horizontally on smaller screens"
+          >
+            <table className={`${styles.table} ${styles.photoTable}`} aria-labelledby="photo-queue-title">
+              <thead>
+                <tr>
+                  <th scope="col">User</th>
+                  <th scope="col">Age / Gender</th>
+                  <th scope="col">Tier / Status</th>
+                  <th scope="col">Awaiting / Approved</th>
+                  <th scope="col" aria-sort="descending">
+                    <span className={styles.sortLabel}>Most Recent <PortalIcon name="arrowDown" /></span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const age = calcAge(row.date_of_birth);
+                  const name = row.display_name ?? row.screen_name ?? "—";
+                  const gender = row.gender_identity ?? "—";
+                  const tier = row.tier ?? "—";
+                  const status = row.status ?? "—";
+                  const awaiting = getAwaitingCount(row);
+                  const mostRecentAt = getMostRecentAt(row);
+                  const profileHref = `/users/${row.user_id}?tab=photos`;
+                  return (
+                    <tr
+                      key={row.user_id}
+                      className={styles.clickableRow}
+                      onClick={(event) => {
+                        // Native links remain available for keyboard/new-tab use.
+                        if ((event.target as HTMLElement).closest("a")) return;
+                        router.push(profileHref);
+                      }}
+                    >
+                      <th scope="row">
+                        <div className={styles.userCell}>
+                          <InitialsBadge name={name} />
+                          <div className={styles.userText}>
+                            <Link
+                              href={profileHref}
+                              prefetch={false}
+                              className={styles.nameLink}
+                              aria-label={`Open photo review for ${name}`}
+                            >
+                              {name}
+                              <PortalIcon name="arrowRight" />
+                            </Link>
+                            <span className={styles.idText}>
+                              {row.user_id}
+                            </span>
+                          </div>
+                        </div>
+                      </th>
+                      <td>{age != null ? age : "—"} / {gender}</td>
+                      <td>{tier} / {status}</td>
+                      <td>
+                        <span className={styles.countPair}>
+                          <span className={styles.countBadge} data-state={awaiting > 0 ? "attention" : "neutral"}>
+                            {awaiting}
+                          </span>
+                          <span>/</span>
+                          <span className={styles.countBadge} data-state={row.approved_count > 0 ? "approved" : "neutral"}>
+                            {row.approved_count}
+                          </span>
+                        </span>
+                      </td>
+                      <td>
+                        {mostRecentAt ? <time dateTime={mostRecentAt} className={styles.tableTime}>
+                          {new Date(mostRecentAt).toLocaleString()}
+                        </time> : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className={styles.pagination}>
+          <p>
+            {rows.length > 0 ? (
+              <>
+                Showing {firstVisible}–{lastVisible}
+                {pagination.total !== null ? ` of ${pagination.total}` : ""}
+                {" • newest photos first"}
+              </>
+            ) : "Newest photos appear first."}
+          </p>
+          <div className={styles.paginationButtons}>
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={!canGoPrevious}
+              className={styles.button}
+            >Previous</button>
+            <span>Page {page}{totalPages !== null ? ` of ${totalPages}` : ""}</span>
+            <button
+              type="button"
+              onClick={() => setPage((current) => current + 1)}
+              disabled={!canGoNext}
+              className={styles.button}
+            >Next</button>
+          </div>
+        </div>
+        <p className={styles.caption}>Open a row to review the member’s photos in User 360. Review their context before making a decision.</p>
+      </section>
     </div>
   );
 }

@@ -1,0 +1,472 @@
+/*
+ * Member profile â€” compact implementation correction, pass 2.
+ * Used only by src/app/users/[id]/page.tsx.
+ *
+ * The existing review.module.css still supplies values, badges and photo
+ * controls. This sheet owns this page's layout; it does not restyle Search,
+ * Photo Review, the dashboard, the top navigation or the coaching editors.
+ *
+ * Colors remain the approved Linen / Warm Cream palette. Tints below are
+ * computed interface treatments, not additional official brand colors.
+ */
+
+/* 1. Local palette and compact toolbar --------------------------------- */
+
+.profile.profile {
+  --profile-cream: var(--brand-warm-cream, #F3EDE9);
+  --profile-linen: var(--brand-linen, #E4DCD6);
+  --profile-blue: var(--brand-twilight-blue, #333092);
+  --profile-indigo: var(--brand-electric-indigo, #7473A9);
+  --profile-ink: var(--brand-charcoal, #162731);
+  --profile-slate: var(--brand-slate, #4A4668);
+  --profile-rule: color-mix(in srgb, var(--profile-indigo) 18%, var(--profile-linen));
+  --profile-edge: color-mix(in srgb, var(--profile-indigo) 35%, var(--profile-linen));
+  --profile-wash: color-mix(in srgb, var(--profile-linen) 25%, var(--profile-cream));
+
+  /*
+   * Mencken remains first choice. Georgia/Times are explicitly temporary
+   * serif fallbacks, not the brand font. No font files are distributed.
+   * Unlike the previous heading stack, a missing Mencken no longer silently
+   * turns the member's heading into the body sans-serif face.
+   */
+  --profile-heading-font: "Mencken Standard Regular", "Mencken Standard",
+    Georgia, "Times New Roman", serif;
+
+  gap: 1rem;
+  color: var(--profile-slate);
+  font-size: 1.125rem;
+  line-height: 1.55;
+}
+
+.profile .toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+  min-width: 0;
+}
+
+.profile .backLink {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--profile-edge);
+  border-radius: 0.65rem;
+  background: var(--profile-cream);
+  color: var(--profile-blue);
+  font-family: var(--portal-font-label, inherit);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-decoration: none;
+  text-align: center;
+}
+
+.profile .memberHeading {
+  display: flex;
+  flex: 1 1 20rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+}
+
+.profile .memberHeading h1 {
+  margin: 0;
+  color: var(--profile-blue);
+  font-family: var(--profile-heading-font);
+  font-size: clamp(1.75rem, 1.45rem + 0.65vw, 2.125rem);
+  font-weight: 400;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.profile .memberStatus {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+/* 2. One working surface with full-width tabs --------------------------- */
+
+.profile .workspace {
+  min-width: 0;
+  padding: clamp(0.85rem, 1.4vw, 1.25rem);
+  border: 1px solid var(--profile-edge);
+  border-radius: 1.25rem;
+  background: var(--profile-cream);
+  box-shadow: 0 0.3rem 1rem rgb(15 0 78 / 5%);
+}
+
+.profile .tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.6rem;
+  margin: 0 0 1.1rem;
+  padding: 0 0 1rem;
+  border-bottom: 1px solid var(--profile-rule);
+}
+
+.profile .tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  min-height: 2.875rem;
+  max-width: 100%;
+  padding: 0.65rem 1.2rem;
+  border: 1px solid var(--profile-edge);
+  border-radius: 0.75rem;
+  background: var(--profile-cream);
+  color: var(--profile-blue);
+  box-shadow: 0 0.12rem 0.3rem rgb(15 0 78 / 4%);
+  font-family: var(--portal-font-label, inherit);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.profile .backLink:hover,
+.profile .tab:hover {
+  border-color: var(--profile-blue);
+  background: var(--profile-wash);
+}
+
+.profile .tab[aria-current="page"] {
+  border-color: var(--profile-blue);
+  background: var(--profile-blue);
+  color: var(--profile-cream);
+  box-shadow: 0 0.2rem 0.45rem rgb(15 0 78 / 15%);
+}
+
+.profile .tab:focus-visible,
+.profile .backLink:focus-visible {
+  outline: 3px solid var(--profile-blue);
+  outline-offset: 3px;
+}
+
+.profile .profileLayout {
+  display: grid;
+  grid-template-columns: minmax(17rem, 0.94fr) minmax(0, 2.16fr);
+  align-items: start;
+  gap: 1.25rem;
+}
+
+.profile .profileSidebar,
+.profile .profileMain {
+  min-width: 0;
+}
+
+.profile .profileMain {
+  container-type: inline-size;
+  container-name: compact-member-details;
+}
+
+/* 3. Member photo and summary ------------------------------------------ */
+
+.profile .summaryCard,
+.profile .sectionCard {
+  min-width: 0;
+  border: 1px solid var(--profile-rule);
+  border-radius: 1rem;
+  background: var(--profile-cream);
+  box-shadow: 0 0.12rem 0.4rem rgb(15 0 78 / 4%);
+}
+
+.profile .summaryCard {
+  padding: 1.1rem;
+}
+
+.profile .profileIdentity,
+.profile .portraitCard {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.profile .profileIdentity h2 {
+  color: var(--profile-blue);
+  font-size: 1.4rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.profile .portraitCard h2 {
+  font-size: 1.2rem;
+}
+
+.profile .portraitFrame {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--profile-rule);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: var(--profile-wash);
+}
+
+.profile .portraitImage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile .portraitFallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 1rem;
+  color: var(--profile-slate);
+  font-size: 1rem;
+  text-align: center;
+}
+
+.profile .idText {
+  margin-top: 0.3rem;
+  color: var(--profile-slate);
+  font-size: 1rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.profile .sidebarSection {
+  display: grid;
+  gap: 0.7rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--profile-rule);
+}
+
+.profile .sidebarSection h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--profile-blue);
+  font-size: 1.125rem;
+}
+
+.profile .sidebarSection h3 span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile .contactItem {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.profile .contactLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.profile .contactValue {
+  color: var(--profile-ink);
+  font-size: 1.125rem;
+  overflow-wrap: anywhere;
+}
+
+.profile .notificationLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.6rem;
+  font-size: 1rem;
+}
+
+.profile .sidebarFacts {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.profile .sidebarFacts > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.7rem;
+}
+
+.profile .sidebarFacts dt {
+  flex: 0 1 6rem;
+  font-size: 1rem;
+}
+
+.profile .sidebarFacts dd {
+  flex: 1 1 9rem;
+  margin: 0;
+  color: var(--profile-ink);
+  font-size: 1.125rem;
+  overflow-wrap: anywhere;
+}
+
+/* 4. Information cards: no oversized colored title bars ---------------- */
+
+.profile .profileSections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 1.15rem;
+}
+
+.profile .sectionCard {
+  padding: 0 1.1rem;
+  overflow: hidden;
+}
+
+.profile .sectionHeading {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.95rem 0 0.85rem;
+  border-bottom: 1px solid var(--profile-rule);
+  color: var(--profile-blue);
+  background: transparent;
+}
+
+.profile .sectionHeading h2 {
+  overflow-wrap: anywhere;
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.profile .sectionBody {
+  padding: 0.15rem 0 0.4rem;
+}
+
+.profile .dataRow {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  align-items: baseline;
+  gap: 0.45rem 1rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--profile-rule);
+}
+
+.profile .dataRow:last-child {
+  border-bottom: 0;
+}
+
+.profile .fieldLabel {
+  color: var(--profile-slate);
+  font-size: 1rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.profile .fieldValue {
+  min-width: 0;
+  color: var(--profile-ink);
+  font-size: 1.125rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+/* Photos and review controls keep their existing shared styles. */
+
+@container compact-member-details (min-width: 44rem) {
+  .profile .profileSections[data-tab="overview"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+}
+
+@container compact-member-details (max-width: 25rem) {
+  .profile .dataRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 5. Narrow screens and large text ------------------------------------- */
+
+@media (max-width: 62rem) {
+  .profile .profileLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .profile .profileIdentity {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .profile .portraitCard {
+    grid-column: 1;
+    grid-row: 1 / span 3;
+  }
+
+  .profile .portraitFrame {
+    max-width: 22rem;
+  }
+}
+
+@media (max-width: 42rem) {
+  .profile .memberHeading {
+    flex-basis: 100%;
+  }
+
+  .profile .profileIdentity {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .profile .portraitCard {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .profile .tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .profile .tab {
+    padding: 0.6rem;
+  }
+
+  .profile .summaryCard,
+  .profile .sectionCard {
+    padding-inline: 0.9rem;
+  }
+}
+
+@media (max-width: 24rem) {
+  .profile .tabs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile .tab {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .profile .workspace,
+  .profile .summaryCard,
+  .profile .sectionCard,
+  .profile .tab,
+  .profile .backLink {
+    border-color: CanvasText;
+  }
+
+  .profile .tab[aria-current="page"] {
+    outline: 2px solid Highlight;
+    outline-offset: -4px;
+  }
+}

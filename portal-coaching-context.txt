@@ -1,0 +1,2003 @@
+
+
+===== src/lib/portalStaffAccess.ts =====
+import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
+import { NextRequest } from "next/server";
+
+export type StaffRole = "staff" | "csr" | "henry" | "admin" | "super_admin";
+export type StaffStatus = "active" | "inactive";
+
+export type StaffPermissions = {
+  user_search?: boolean;
+  onboarding?: boolean;
+  photo_review?: boolean;
+  library_review?: boolean;
+  jobs?: boolean;
+  henry_desk?: boolean;
+  safety?: boolean;
+  system?: boolean;
+};
+
+export type StaffUpsertInput = {
+  id?: string | null;
+  email: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  role?: string | null;
+  status?: string | null;
+  permissions?: StaffPermissions | null;
+};
+
+export type StaffRow = {
+  id: string;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  display_name?: string | null;
+  role: StaffRole | string | null;
+  status: StaffStatus | string | null;
+  is_active?: boolean | null;
+  permissions: StaffPermissions | null;
+  auth_user_id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export const STAFF_SELECT =
+  "id,email,first_name,last_name,display_name,role,status,is_active,permissions,auth_user_id,created_at,updated_at";
+
+export const defaultPermissions: Record<StaffRole, StaffPermissions> = {
+  staff: { user_search: true },
+  csr: { user_search: true, onboarding: true, jobs: true },
+  henry: { user_search: true, henry_desk: true, jobs: true },
+  admin: {
+    user_search: true,
+    onboarding: true,
+    photo_review: true,
+    library_review: true,
+    jobs: true,
+    henry_desk: true,
+    safety: true,
+    system: true,
+  },
+  super_admin: {
+    user_search: true,
+    onboarding: true,
+    photo_review: true,
+    library_review: true,
+    jobs: true,
+    henry_desk: true,
+    safety: true,
+    system: true,
+  },
+};
+
+const allowedPermissionKeys: (keyof StaffPermissions)[] = [
+  "user_search",
+  "onboarding",
+  "photo_review",
+  "library_review",
+  "jobs",
+  "henry_desk",
+  "safety",
+  "system",
+];
+
+export function createServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !key) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
+  }
+
+  return createClient(url, key, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
+
+export function normalizeEmail(email: unknown) {
+  return String(email || "").trim().toLowerCase();
+}
+
+export function normalizeRole(role: unknown): StaffRole {
+  const value = String(role || "staff").trim().toLowerCase();
+  if (["staff", "csr", "henry", "admin", "super_admin"].includes(value)) {
+    return value as StaffRole;
+  }
+  return "staff";
+}
+
+export function normalizeStatus(status: unknown): StaffStatus {
+  return String(status || "active").trim().toLowerCase() === "inactive" ? "inactive" : "active";
+}
+
+export function normalizePermissions(role: StaffRole, permissions: unknown): StaffPermissions {
+  const base = defaultPermissions[role] || defaultPermissions.staff;
+  const input = typeof permissions === "object" && permissions !== null ? (permissions as StaffPermissions) : {};
+  const clean: StaffPermissions = { ...base };
+
+  for (const key of allowedPermissionKeys) {
+    if (Object.prototype.hasOwnProperty.call(input, key)) {
+      clean[key] = !!input[key];
+    }
+  }
+
+  return clean;
+}
+
+function cleanNullableText(value: unknown) {
+  const text = String(value || "").trim();
+  return text ? text : null;
+}
+
+function makeDisplayName(firstName: string | null, lastName: string | null, email: string) {
+  const name = `${firstName || ""} ${lastName || ""}`.trim();
+  return name || email.split("@")[0] || email;
+}
+
+function siteUrlFrom(origin?: string | null) {
+  return (
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    origin ||
+    ""
+  ).replace(/\/$/, "");
+}
+
+export function getBearerToken(req: NextRequest) {
+  const header = req.headers.get("authorization") || req.headers.get("Authorization") || "";
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1] || null;
+}
+
+export async function getAuthedUser(req: NextRequest, supabase: SupabaseClient) {
+  const token = getBearerToken(req);
+  if (!token) {
+    const error = new Error("Missing login token.");
+    (error as any).status = 401;
+    throw error;
+  }
+
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) {
+    const authError = new Error("Invalid or expired login token.");
+    (authError as any).status = 401;
+    throw authError;
+  }
+
+  return data.user;
+}
+
+export async function findStaffForUser(supabase: SupabaseClient, user: User) {
+  const email = normalizeEmail(user.email);
+  const orParts = [`auth_user_id.eq.${user.id}`, `id.eq.${user.id}`];
+  if (email) orParts.push(`email.eq.${email}`);
+
+  const { data, error } = await supabase
+    .from("staff")
+    .select(STAFF_SELECT)
+    .or(orParts.join(","))
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as StaffRow | null;
+}
+
+export async function assertPortalAdmin(req: NextRequest) {
+  const supabase = createServiceClient();
+  const user = await getAuthedUser(req, supabase);
+  const staff = await findStaffForUser(supabase, user);
+
+  const role = String(staff?.role || "").toLowerCase();
+  const status = String(staff?.status || "").toLowerCase();
+  const isActive = staff?.is_active !== false && !["inactive", "disabled", "rejected"].includes(status);
+  const isAdmin = isActive && ["admin", "super_admin"].includes(role);
+
+  if (!isAdmin) {
+    const error = new Error("Admin access required.");
+    (error as any).status = 403;
+    throw error;
+  }
+
+  return { supabase, user, staff };
+}
+
+async function findAuthUserByEmail(supabase: SupabaseClient, email: string) {
+  // Supabase Auth Admin does not have a direct getUserByEmail call.
+  // We page through users and match the email so staff.id can stay equal to auth.users.id.
+  const perPage = 1000;
+
+  for (let page = 1; page <= 20; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+
+    const users = data?.users || [];
+    const found = users.find((u) => normalizeEmail(u.email) === email);
+    if (found) return found;
+
+    if (users.length < perPage) break;
+  }
+
+  return null;
+}
+
+async function inviteAuthUserByEmail(supabase: SupabaseClient, email: string, origin?: string | null) {
+  const siteUrl = siteUrlFrom(origin);
+  const redirectTo = siteUrl ? `${siteUrl}/login?next=/admin` : undefined;
+
+  const { data, error } = await supabase.auth.admin.inviteUserByEmail(
+    email,
+    redirectTo ? { redirectTo } : undefined
+  );
+
+  if (error) throw error;
+  if (!data?.user?.id) {
+    throw new Error("Invite was sent, but Supabase did not return an auth user id.");
+  }
+
+  return data.user;
+}
+
+export async function upsertStaffByEmail(
+  supabase: SupabaseClient,
+  input: StaffUpsertInput,
+  options: { origin?: string | null; inviteIfMissing?: boolean } = {}
+) {
+  const email = normalizeEmail(input.email);
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+    const error = new Error("A valid email is required.");
+    (error as any).status = 400;
+    throw error;
+  }
+
+  const role = normalizeRole(input.role);
+  const status = normalizeStatus(input.status);
+  const firstName = cleanNullableText(input.first_name);
+  const lastName = cleanNullableText(input.last_name);
+  const permissions = normalizePermissions(role, input.permissions);
+  const isActive = status === "active";
+
+  const payload = {
+    email,
+    first_name: firstName,
+    last_name: lastName,
+    display_name: makeDisplayName(firstName, lastName, email),
+    role,
+    status,
+    is_active: isActive,
+    permissions,
+    updated_at: new Date().toISOString(),
+  };
+
+  // Editing an existing staff row from the table.
+  if (input.id) {
+    const { data, error } = await supabase
+      .from("staff")
+      .update(payload)
+      .eq("id", input.id)
+      .select(STAFF_SELECT)
+      .single();
+
+    if (error) throw error;
+    return data as StaffRow;
+  }
+
+  // Existing staff by email: update it, do not create a duplicate.
+  const { data: existingByEmail, error: existingByEmailError } = await supabase
+    .from("staff")
+    .select("id,auth_user_id,email")
+    .eq("email", email)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingByEmailError) throw existingByEmailError;
+
+  if (existingByEmail?.id) {
+    const { data, error } = await supabase
+      .from("staff")
+      .update(payload)
+      .eq("id", existingByEmail.id)
+      .select(STAFF_SELECT)
+      .single();
+
+    if (error) throw error;
+    return data as StaffRow;
+  }
+
+  // New staff: find their existing auth login. If not found, invite them.
+  let authUser = await findAuthUserByEmail(supabase, email);
+
+  if (!authUser) {
+    if (options.inviteIfMissing === false) {
+      const error = new Error("No login exists for this email yet. Send an invite first.");
+      (error as any).status = 404;
+      throw error;
+    }
+
+    authUser = await inviteAuthUserByEmail(supabase, email, options.origin);
+  }
+
+  const authUserId = authUser.id;
+
+  // If staff exists under this auth id with an older email, update it instead of inserting.
+  const { data: existingByAuth, error: existingByAuthError } = await supabase
+    .from("staff")
+    .select("id,auth_user_id,email")
+    .or(`id.eq.${authUserId},auth_user_id.eq.${authUserId}`)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingByAuthError) throw existingByAuthError;
+
+  if (existingByAuth?.id) {
+    const { data, error } = await supabase
+      .from("staff")
+      .update({ ...payload, auth_user_id: authUserId })
+      .eq("id", existingByAuth.id)
+      .select(STAFF_SELECT)
+      .single();
+
+    if (error) throw error;
+    return data as StaffRow;
+  }
+
+  // Your portal convention: staff.id is the Supabase auth UUID.
+  const { data, error } = await supabase
+    .from("staff")
+    .insert({
+      id: authUserId,
+      auth_user_id: authUserId,
+      ...payload,
+    })
+    .select(STAFF_SELECT)
+    .single();
+
+  if (error) throw error;
+  return data as StaffRow;
+}
+
+export function apiError(error: unknown) {
+  const anyError = error as any;
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : anyError?.message ||
+        anyError?.error_description ||
+        anyError?.details ||
+        anyError?.hint ||
+        "Something went wrong.";
+
+  const status =
+    typeof anyError?.status === "number"
+      ? anyError.status
+      : typeof anyError?.statusCode === "number"
+        ? anyError.statusCode
+        : 500;
+
+  console.error("[staff access api error]", anyError);
+  return { message, status };
+}
+
+
+===== src/lib/supabaseBrowser.ts =====
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+const globalForSupabase = globalThis as unknown as {
+  __supabasePortal?: SupabaseClient;
+};
+
+export const supabaseBrowser: SupabaseClient =
+  globalForSupabase.__supabasePortal ??
+  createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      storageKey: "luvcoachai-portal-auth",
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
+
+if (!globalForSupabase.__supabasePortal) {
+  globalForSupabase.__supabasePortal = supabaseBrowser;
+}
+
+
+===== src/lib/supabaseRoute.ts =====
+// src/lib/supabaseRoute.ts
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: Record<string, any>;
+};
+
+export async function createSupabaseRouteClient() {
+  const cookieStore = await cookies();
+  const pending: CookieToSet[] = [];
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          const all = cookieStore.getAll?.() ?? [];
+          return all.map((c: any) => ({ name: c.name, value: c.value }));
+        },
+        setAll(cookiesToSet) {
+          for (const c of cookiesToSet as CookieToSet[]) pending.push(c);
+        },
+      },
+    }
+  );
+
+  function withCookies<T>(res: NextResponse<T>) {
+    for (const c of pending) {
+      res.cookies.set(c.name, c.value, c.options);
+    }
+    return res;
+  }
+
+  return { supabase, withCookies };
+}
+
+===== src/lib/supabaseServer.ts =====
+import { cookies } from "next/headers";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
+
+export async function createSupabaseServerClient() {
+  const cookieStore = await cookies(); // <-- THIS is the fix
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return (cookieStore as any).get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          (cookieStore as any).set({ name, value, ...options });
+        },
+        remove(name: string, options: CookieOptions) {
+          (cookieStore as any).set({ name, value: "", ...options, maxAge: 0 });
+        },
+      },
+    }
+  );
+}
+
+
+===== src/lib/supabaseService.ts =====
+// src/lib/supabaseService.ts
+import { createClient } from "@supabase/supabase-js";
+
+export function createSupabaseServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!; // MUST be set in .env.local
+
+  if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY is required");
+
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+
+===== src/lib/supabaseServiceServer.ts =====
+// src/lib/supabaseServiceServer.ts
+import "server-only";
+import { createClient } from "@supabase/supabase-js";
+
+export function createSupabaseServiceServerClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url) throw new Error("Missing env: NEXT_PUBLIC_SUPABASE_URL");
+  if (!serviceKey) throw new Error("Missing env: SUPABASE_SERVICE_ROLE_KEY");
+
+  return createClient(url, serviceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+
+===== src/lib/useAuthWatcher.ts =====
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { supabaseBrowser } from "@/lib/supabaseBrowser";
+
+export function useAuthWatcher() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const { data: listener } = supabaseBrowser.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (!session) {
+          try {
+            await supabaseBrowser.auth.signOut();
+          } catch {}
+
+          try {
+            Object.keys(localStorage)
+              .filter((k) => k.startsWith("sb-"))
+              .forEach((k) => localStorage.removeItem(k));
+          } catch {}
+
+          router.replace("/login");
+        }
+      }
+    );
+
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
+  }, [router]);
+}
+
+===== src/app/api/staff/me/route.ts =====
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { createSupabaseRouteClient } from "@/lib/supabaseRoute";
+
+export const dynamic = "force-dynamic";
+
+// service role for staff table read/write
+function svc() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+  return createClient(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+}
+
+const STAFF_SELECT =
+  "id, email, first_name, last_name, role, is_active, status, permissions, auth_user_id";
+
+function staffIsActive(staff: any) {
+  if (!staff) return false;
+
+  const status = String(staff.status || "active").toLowerCase();
+
+  return (
+    staff.is_active !== false &&
+    !["inactive", "disabled", "rejected"].includes(status)
+  );
+}
+
+function staffIsAdmin(staff: any) {
+  if (!staffIsActive(staff)) return false;
+
+  const role = String(staff.role || "").toLowerCase();
+
+  return ["admin", "super_admin"].includes(role);
+}
+
+export async function GET() {
+  const { supabase, withCookies } = await createSupabaseRouteClient();
+
+  const {
+    data: { user },
+    error: userErr,
+  } = await supabase.auth.getUser();
+
+  if (userErr || !user) {
+    return withCookies(
+      NextResponse.json(
+        {
+          user: null,
+          is_staff: false,
+          is_admin: false,
+          role: null,
+          permissions: {},
+          staff: null,
+          name: null,
+        },
+        { status: 200 }
+      )
+    );
+  }
+
+  const db = svc();
+
+  let staff: any = null;
+
+  // 1. First try the strongest match: auth_user_id
+  const byAuth = await db
+    .from("staff")
+    .select(STAFF_SELECT)
+    .eq("auth_user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  if (byAuth.error) {
+    return withCookies(
+      NextResponse.json({ error: byAuth.error.message }, { status: 400 })
+    );
+  }
+
+  staff = byAuth.data;
+
+  // 2. Fallback: match pre-approved/manual staff by email
+  if (!staff && user.email) {
+    const email = user.email.trim().toLowerCase();
+
+    const byEmail = await db
+      .from("staff")
+      .select(STAFF_SELECT)
+      .eq("email", email)
+      .limit(1)
+      .maybeSingle();
+
+    if (byEmail.error) {
+      return withCookies(
+        NextResponse.json({ error: byEmail.error.message }, { status: 400 })
+      );
+    }
+
+    staff = byEmail.data;
+  }
+
+  // 3. Optional fallback for older rows where staff.id was the auth user id
+  if (!staff) {
+    const byId = await db
+      .from("staff")
+      .select(STAFF_SELECT)
+      .eq("id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (byId.error) {
+      return withCookies(
+        NextResponse.json({ error: byId.error.message }, { status: 400 })
+      );
+    }
+
+    staff = byId.data;
+  }
+
+  // 4. If we found the staff row by email, link it to the auth user id.
+  // This is what makes future lookups reliable.
+  if (staff?.id && !staff.auth_user_id) {
+    const linked = await db
+      .from("staff")
+      .update({ auth_user_id: user.id })
+      .eq("id", staff.id)
+      .is("auth_user_id", null)
+      .select(STAFF_SELECT)
+      .maybeSingle();
+
+    // Do not block login if the link update fails.
+    // The staff row was already found by email.
+    if (!linked.error && linked.data) {
+      staff = linked.data;
+    }
+  }
+
+  const isStaff = staffIsActive(staff);
+  const isAdmin = staffIsAdmin(staff);
+
+  return withCookies(
+    NextResponse.json(
+      {
+        user: {
+          id: user.id,
+          email: user.email,
+        },
+        is_staff: isStaff,
+        is_admin: isAdmin,
+        role: isStaff ? staff?.role ?? null : null,
+        permissions: isStaff ? staff?.permissions ?? {} : {},
+        staff: isStaff ? staff : null,
+        name: isStaff ? staff?.first_name ?? null : null,
+      },
+      { status: 200 }
+    )
+  );
+}
+
+===== src/app/library-review/page.tsx =====
+"use client";
+
+import { useEffect, useState } from "react";
+import { supabaseBrowser } from "@/lib/supabaseBrowser";
+import { Panel } from "@/components/Panel";
+import PortalButton from "@/components/ui/PortalButton";
+
+type Category = {
+  id: string;
+  name: string;
+  description: string;
+  display_order: number;
+  scene_image: string;
+  slug: string;
+  theme: string;
+  lesson_count: number;
+};
+
+type Lesson = {
+  id: string;
+  category: string;
+  title: string;
+  summary: string;
+  body: string;
+  tags: string[];
+  canon_key: string;
+  level: string;
+  created_at?: string;
+  tier: string;
+  journal_prompts: string;
+  is_published: boolean;
+  coach_prompts: string[];
+  category_id: string;
+  sequence_number: number | null;
+};
+
+const toArray = (value: string) =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const fromArray = (value?: string[] | null) => (value ?? []).join(", ");
+
+export default function LibraryPage() {
+  const supabase = supabaseBrowser;
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
+const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+const [draftCategory, setDraftCategory] = useState<Category | null>(null);
+
+
+const updateActiveCategory = (patch: Partial<Category>) => {
+  if (isCreatingCategory) {
+    setDraftCategory((prev) => (prev ? { ...prev, ...patch } : prev));
+    return;
+  }
+
+  setCategories((prev) =>
+    prev.map((cat) =>
+      cat.id === selectedCategory ? { ...cat, ...patch } : cat
+    )
+  );
+};
+
+  const refreshCategories = async () => {
+    const { data, error } = await supabase
+      .from("lesson_categories")
+      .select(
+        ` id,
+          name,
+          description,
+          display_order,
+          scene_image,
+          slug,
+          theme,
+          lessons(id)
+        `
+      )
+      .order("display_order");
+
+    if (error) {
+      console.error("Error loading categories:", error);
+      return;
+    }
+
+
+    const mapped =
+      data?.map((cat: any) => ({
+        id: cat.id,
+        name: cat.name ?? "",
+        description: cat.description ?? "",
+        display_order: cat.display_order ?? 0,
+        scene_image: cat.scene_image ?? "",
+        slug: cat.slug ?? "",
+        theme: cat.theme ?? "",
+        lesson_count: cat.lessons?.length ?? 0,
+      })) ?? [];
+
+    setCategories(mapped);
+  };
+
+  const refreshLessons = async (categoryId: string) => {
+    const { data, error } = await supabase
+      .from("lessons")
+      .select("*")
+      .eq("category_id", categoryId)
+      .order("canon_key", { ascending: true, nullsFirst: false })
+      .order("sequence_number", { ascending: true, nullsFirst: false });
+
+    if (error) {
+      console.error("Error loading lessons:", error);
+      return;
+    }
+
+    setLessons((data as Lesson[]) || []);
+  };
+
+  useEffect(() => {
+    refreshCategories();
+  }, []);
+
+useEffect(() => {
+  if (!selectedCategory) return;
+
+  refreshLessons(selectedCategory);
+}, [selectedCategory]);
+
+const selectedCategoryRecord =
+  categories.find((cat) => cat.id === selectedCategory) ?? null;
+
+  const activeCategoryRecord = isCreatingCategory
+  ? draftCategory
+  : selectedCategoryRecord;
+
+const handleNewCategory = () => {
+  const nextDisplayOrder =
+    categories.length > 0
+      ? Math.max(...categories.map((c) => c.display_order ?? 0)) + 1
+      : 1;
+
+  setSelectedCategory(null);
+  setSelectedLesson(null);
+  setIsCreatingCategory(true);
+
+  setDraftCategory({
+    id: "",
+    name: "",
+    description: "",
+    display_order: nextDisplayOrder,
+    scene_image: "",
+    slug: "",
+    theme: "",
+    lesson_count: 0,
+  });
+};
+
+const handleSaveCategory = async () => {
+  if (!activeCategoryRecord) return;
+
+  const categoryPayload = {
+    name: activeCategoryRecord.name.trim(),
+    description: activeCategoryRecord.description ?? "",
+    display_order: Number(activeCategoryRecord.display_order ?? 0),
+    scene_image: activeCategoryRecord.scene_image ?? "",
+    slug: activeCategoryRecord.slug ?? "",
+    theme: activeCategoryRecord.theme ?? "",
+  };
+
+  let error;
+
+  if (activeCategoryRecord.id) {
+    const result = await supabase
+      .from("lesson_categories")
+      .update(categoryPayload)
+      .eq("id", activeCategoryRecord.id);
+
+    error = result.error;
+  } else {
+    const result = await supabase
+      .from("lesson_categories")
+      .insert(categoryPayload);
+
+    error = result.error;
+  }
+
+  if (error) {
+    console.error("Error saving category:", error);
+    alert("Error saving category.");
+    return;
+  }
+
+  await refreshCategories();
+  alert("Category saved!");
+  setIsCreatingCategory(false);
+  setDraftCategory(null);
+};
+
+  const handleNewLesson = () => {
+    if (!selectedCategory) {
+      alert("Select a category first.");
+      return;
+    }
+
+    const selectedCat = categories.find((cat) => cat.id === selectedCategory);
+    const nextSequenceNumber =
+      lessons.length > 0
+        ? Math.max(...lessons.map((lesson) => lesson.sequence_number ?? 0)) + 1
+        : 1;
+
+    setSelectedLesson({
+      id: "",
+      category: selectedCat?.name ?? "",
+      title: "",
+      summary: "",
+      body: "",
+      tags: [],
+      canon_key: "",
+      level: "NULL",
+      tier: "All",
+      journal_prompts: "",
+      is_published: false,
+      coach_prompts: [],
+      category_id: selectedCategory,
+      sequence_number: nextSequenceNumber,
+    });
+  };
+  
+
+  const handleSaveLesson = async () => {
+    if (!selectedLesson) return;
+
+    const selectedCat = categories.find(
+      (cat) => cat.id === selectedLesson.category_id
+    );
+
+    const payload = {
+      category: selectedCat?.name ?? selectedLesson.category ?? "",
+      title: selectedLesson.title.trim(),
+      summary: selectedLesson.summary ?? "",
+      body: selectedLesson.body ?? "",
+      tags: selectedLesson.tags ?? [],
+      canon_key: selectedLesson.canon_key?.trim() || null,
+      level: selectedLesson.level ?? "",
+      tier: selectedLesson.tier || "All",
+      journal_prompts: selectedLesson.journal_prompts ?? "",
+      is_published: selectedLesson.is_published ?? false,
+      coach_prompts: selectedLesson.coach_prompts ?? [],
+      category_id: selectedLesson.category_id,
+      sequence_number: selectedLesson.sequence_number ?? null,
+    };
+
+    if (!payload.title.trim()) {
+      alert("Lesson title is required.");
+      return;
+    }
+
+    if (!payload.category_id) {
+      alert("Lesson category is required.");
+      return;
+    }
+
+    if (!selectedLesson.id) {
+      const { data, error } = await supabase
+        .from("lessons")
+        .insert(payload)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error creating lesson:", error);
+        alert("Error creating lesson.");
+        return;
+      }
+
+      await refreshLessons(payload.category_id);
+      await refreshCategories();
+      setSelectedLesson(data as Lesson);
+      alert("Lesson created!");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("lessons")
+      .update(payload)
+      .eq("id", selectedLesson.id);
+
+    if (error) {
+      console.error("Error saving lesson:", error);
+      alert("Error saving lesson.");
+      return;
+    }
+
+    await refreshLessons(payload.category_id);
+    await refreshCategories();
+    alert("Saved!");
+  };
+
+  return (
+    <div className="w-full px-4 py-4 md:px-6">
+      <div className="mx-auto w-full max-w-[1600px]">
+        <Panel>
+          <div className="mb-4">
+            <h1 className="text-xl font-semibold">Library Review</h1>
+            <p className="text-sm opacity-70">
+              Organize categories and edit lessons.
+            </p>
+          </div>
+
+          <div className="grid min-h-[70vh] grid-cols-12 gap-4">
+            <div className="col-span-12 rounded-xl border p-4 lg:col-span-2">
+              <h2 className="mb-2 text-sm font-semibold uppercase opacity-70">
+                Categories
+              </h2>
+
+              <PortalButton onClick={handleNewCategory}>
+                + New Category
+              </PortalButton>
+
+
+              {activeCategoryRecord && (
+                <div className="mt-4 space-y-3 border-t pt-4">
+{isCreatingCategory && (
+  <PortalButton
+    onClick={() => {
+      setIsCreatingCategory(false);
+      setDraftCategory(null);
+    }}
+  >
+    Cancel New Category
+  </PortalButton>
+)}
+
+<input
+  className="w-full rounded-lg border px-3 py-2"
+  value={activeCategoryRecord.name || ""}
+  onChange={(e) => updateActiveCategory({ name: e.target.value })}
+  placeholder="Category name"
+/>
+
+                  <input
+                    className="w-full rounded-lg border px-3 py-2"
+                    type="number"
+                    value={activeCategoryRecord.display_order}
+                    onChange={(e) =>
+                      updateActiveCategory({
+                        display_order: e.target.value ? Number(e.target.value) : 0,
+                      })
+                    }
+                    placeholder="Display order"
+                  />
+
+<input
+  className="w-full rounded-lg border px-3 py-2"
+  value={activeCategoryRecord.scene_image || ""}
+  onChange={(e) => updateActiveCategory({ scene_image: e.target.value })}
+  placeholder="Scene image"
+/>
+
+                  <input
+                    className="w-full rounded-lg border px-3 py-2"
+                    value={activeCategoryRecord.slug || ""}
+onChange={(e) => updateActiveCategory({ slug: e.target.value })}
+                    placeholder="Slug"
+                  />
+
+                  <input
+  className="w-full rounded-lg border px-3 py-2"
+  value={activeCategoryRecord.theme || ""}
+  onChange={(e) => updateActiveCategory({ theme: e.target.value })}
+  placeholder="Theme"
+/>
+
+                  <textarea
+                    className="w-full rounded-lg border px-3 py-2"
+                    rows={4}
+                    value={activeCategoryRecord.description}
+onChange={(e) => updateActiveCategory({ description: e.target.value || ""})}
+                    placeholder="Description"
+                  />
+
+                  <PortalButton onClick={handleSaveCategory}>
+                    Save Category
+                  </PortalButton>
+                </div>
+              )}
+
+              <div className="mt-4 space-y-2">
+                {categories.map((cat) => (
+                  <PortalButton
+                    key={cat.id}
+                    onClick={() => {
+                      setSelectedCategory(cat.id);
+                      setSelectedLesson(null);
+                      setIsCreatingCategory(false);
+                      setDraftCategory(null);
+                    }}
+                    active={selectedCategory === cat.id}
+                    className="block w-full rounded-lg border px-3 py-2 text-left hover:opacity-80"
+                  >
+                    {cat.name} ({cat.lesson_count})
+                  </PortalButton>
+                ))}
+              </div>
+            </div>
+           
+
+            <div className="col-span-12 rounded-xl border p-4 lg:col-span-3">
+              <h2 className="mb-2 text-sm font-semibold uppercase opacity-70">
+                Lessons
+              </h2>
+
+              <PortalButton onClick={handleNewLesson}>+ New Lesson</PortalButton>
+
+              <div className="mt-4 space-y-2">
+                {lessons.map((lesson) => (
+                  <PortalButton
+                    key={lesson.id}
+                    onClick={() => setSelectedLesson(lesson)}
+                    active={selectedLesson?.id === lesson.id}
+                    className="block w-full text-left"
+                  >
+                    {lesson.canon_key || lesson.sequence_number || "—"} — {lesson.title}
+                  </PortalButton>
+                ))}
+              </div>
+            </div>
+
+            <div className="col-span-12 rounded-xl border p-4 lg:col-span-7">
+              {selectedLesson ? (
+                <>
+                  <h2 className="mb-3 text-sm font-semibold uppercase opacity-70">
+                    Edit Lesson
+                  </h2>
+
+                  <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <select
+                      className="w-full rounded-lg border px-3 py-2 h-[44px]"
+                      value={selectedLesson.category_id}
+                      onChange={(e) =>
+                        setSelectedLesson({
+                          ...selectedLesson,
+                          category_id: e.target.value,
+                        })
+                      }
+                    >
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      className="w-full rounded-lg border px-3 py-2 h-[44px]"
+                      value={selectedLesson.tier}
+                      onChange={(e) =>
+                        setSelectedLesson({
+                          ...selectedLesson,
+                          tier: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="All">All</option>
+                      <option value="Member">Member</option>
+                    </select>
+                  </div>
+
+                  <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <input
+                      className="w-full rounded-lg border px-3 py-2 h-[44px]"
+                      value={selectedLesson.canon_key ?? ""}
+                      onChange={(e) =>
+                        setSelectedLesson({
+                          ...selectedLesson,
+                          canon_key: e.target.value,
+                        })
+                      }
+                      placeholder="Canon key"
+                    />
+
+                    <input
+                      className="w-full rounded-lg border px-3 py-2 h-[44px]"
+                      type="number"
+                      value={selectedLesson.sequence_number ?? ""}
+                      onChange={(e) =>
+                        setSelectedLesson({
+                          ...selectedLesson,
+                          sequence_number: e.target.value
+                            ? Number(e.target.value)
+                            : null,
+                        })
+                      }
+                      placeholder="Sequence number"
+                    />
+
+                    <input
+                      className="w-full rounded-lg border px-3 py-2 h-[44px]"
+                      value={selectedLesson.level ?? ""}
+                      onChange={(e) =>
+                        setSelectedLesson({
+                          ...selectedLesson,
+                          level: e.target.value,
+                        })
+                      }
+                      placeholder="Level"
+                    />
+                  </div>
+
+                  <input
+                    className="mb-3 w-full rounded-lg border px-3 py-2 h-[44px]"
+                    value={selectedLesson.title}
+                    onChange={(e) =>
+                      setSelectedLesson({
+                        ...selectedLesson,
+                        title: e.target.value,
+                      })
+                    }
+                    placeholder="Lesson title"
+                  />
+
+                  <textarea
+                    className="mb-3 w-full rounded-lg border px-3 py-2"
+                    rows={4}
+                    value={selectedLesson.summary ?? ""}
+                    onChange={(e) =>
+                      setSelectedLesson({
+                        ...selectedLesson,
+                        summary: e.target.value,
+                      })
+                    }
+                    placeholder="Summary"
+                  />
+
+                  <textarea
+                    className="mb-3 w-full rounded-lg border px-3 py-2"
+                    rows={22}
+                    value={selectedLesson.body ?? ""}
+                    onChange={(e) =>
+                      setSelectedLesson({
+                        ...selectedLesson,
+                        body: e.target.value,
+                      })
+                    }
+                    placeholder="Body"
+                  />
+
+                  <textarea
+                    className="mb-3 w-full rounded-lg border px-3 py-2"
+                    rows={3}
+                    value={fromArray(selectedLesson.tags)}
+                    onChange={(e) =>
+                      setSelectedLesson({
+                        ...selectedLesson,
+                        tags: toArray(e.target.value),
+                      })
+                    }
+                    placeholder="Tags, separated by commas"
+                  />
+
+                  <textarea
+                    className="mb-3 w-full rounded-lg border px-3 py-2"
+                    rows={3}
+                    value={fromArray(selectedLesson.coach_prompts)}
+                    onChange={(e) =>
+                      setSelectedLesson({
+                        ...selectedLesson,
+                        coach_prompts: toArray(e.target.value),
+                      })
+                    }
+                    placeholder="Coach prompts, separated by commas"
+                  />
+
+                  <textarea
+                    className="mb-3 w-full rounded-lg border px-3 py-2"
+                    rows={4}
+                    value={selectedLesson.journal_prompts ?? ""}
+                    onChange={(e) =>
+                      setSelectedLesson({
+                        ...selectedLesson,
+                        journal_prompts: e.target.value,
+                      })
+                    }
+                    placeholder="Journal prompts"
+                  />
+
+                  <label className="mb-4 flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedLesson.is_published ?? false}
+                      onChange={(e) =>
+                        setSelectedLesson({
+                          ...selectedLesson,
+                          is_published: e.target.checked,
+                        })
+                      }
+                    />
+                    Published
+                  </label>
+
+                  <PortalButton onClick={handleSaveLesson}>Save Lesson</PortalButton>
+                </>
+              ) : (
+                <div className="opacity-60">Select a lesson</div>
+              )}
+            </div>
+          </div>
+          
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+
+===== src/app/session-talks/page.tsx =====
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { supabaseBrowser } from "@/lib/supabaseBrowser";
+import { Panel } from "@/components/Panel";
+import PortalButton from "@/components/ui/PortalButton";
+
+type TalkType = {
+  id?: string;
+  slug: string;
+  title?: string | null;
+  name?: string | null;
+  label?: string | null;
+  description?: string | null;
+  display_order?: number | null;
+  sort_order?: number | null;
+  status?: string | null;
+  source?: "table" | "session_talks";
+  [key: string]: any;
+};
+
+type SessionTalk = {
+  id: string;
+  slug: string;
+  title: string;
+  talk_type_slug: string;
+  topic_area: string | null;
+  member_summary: string | null;
+  coach_notes: string | null;
+  default_capacity: number | null;
+  default_duration_minutes: number | null;
+  status: string | null;
+  sort_order: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const titleizeSlug = (value: string) =>
+  value
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const talkTypeLabel = (talkType: TalkType) => {
+  const label = talkType.title || talkType.name || talkType.label;
+  return label?.trim() || titleizeSlug(talkType.slug || "untitled");
+};
+
+const talkTypeOrder = (talkType: TalkType) =>
+  Number(talkType.display_order ?? talkType.sort_order ?? 9999);
+
+const numberOrNull = (value: string) => {
+  if (value.trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+export default function SessionTalksPage() {
+  const supabase = supabaseBrowser;
+
+  const [talkTypes, setTalkTypes] = useState<TalkType[]>([]);
+  const [talks, setTalks] = useState<SessionTalk[]>([]);
+  const [selectedTalkTypeSlug, setSelectedTalkTypeSlug] = useState<string | null>(
+    null
+  );
+  const [selectedTalk, setSelectedTalk] = useState<SessionTalk | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const refreshTalkTypes = async () => {
+    const { data, error } = await supabase.from("session_talk_types").select("*");
+
+    if (error) {
+      console.error("Error loading session_talk_types:", error);
+      setLoadError(
+        `Could not load session_talk_types: ${error.message}. Session talks can still load from session_talks.`
+      );
+      setTalkTypes([]);
+      return;
+    }
+
+    const mapped = ((data ?? []) as TalkType[])
+      .filter((type) => !!type.slug)
+      .map((type) => ({ ...type, source: "table" as const }))
+      .sort((a, b) => {
+        const orderCompare = talkTypeOrder(a) - talkTypeOrder(b);
+        if (orderCompare !== 0) return orderCompare;
+        return talkTypeLabel(a).localeCompare(talkTypeLabel(b));
+      });
+
+    setTalkTypes(mapped);
+  };
+
+  const refreshTalks = async () => {
+    const { data, error } = await supabase
+      .from("session_talks")
+      .select(
+        `id,
+         slug,
+         title,
+         talk_type_slug,
+         topic_area,
+         member_summary,
+         coach_notes,
+         default_capacity,
+         default_duration_minutes,
+         status,
+         sort_order,
+         created_at,
+         updated_at`
+      )
+      .order("sort_order", { ascending: true, nullsFirst: false })
+      .order("title", { ascending: true });
+
+    if (error) {
+      console.error("Error loading session_talks:", error);
+      setLoadError(`Could not load session_talks: ${error.message}`);
+      setTalks([]);
+      return;
+    }
+
+    setTalks((data ?? []) as SessionTalk[]);
+  };
+
+  const refreshAll = async () => {
+    setIsLoading(true);
+    setLoadError(null);
+
+    await refreshTalkTypes();
+    await refreshTalks();
+
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    refreshAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const displayTalkTypes = useMemo(() => {
+    const bySlug = new Map<string, TalkType>();
+
+    talkTypes.forEach((type) => {
+      if (type.slug) bySlug.set(type.slug, type);
+    });
+
+    talks.forEach((talk) => {
+      if (!talk.talk_type_slug) return;
+      if (!bySlug.has(talk.talk_type_slug)) {
+        bySlug.set(talk.talk_type_slug, {
+          slug: talk.talk_type_slug,
+          title: titleizeSlug(talk.talk_type_slug),
+          source: "session_talks",
+        });
+      }
+    });
+
+    return Array.from(bySlug.values()).sort((a, b) => {
+      const orderCompare = talkTypeOrder(a) - talkTypeOrder(b);
+      if (orderCompare !== 0) return orderCompare;
+      return talkTypeLabel(a).localeCompare(talkTypeLabel(b));
+    });
+  }, [talkTypes, talks]);
+
+  const filteredTalks = useMemo(() => {
+    if (!selectedTalkTypeSlug) return talks;
+    return talks.filter((talk) => talk.talk_type_slug === selectedTalkTypeSlug);
+  }, [talks, selectedTalkTypeSlug]);
+
+  useEffect(() => {
+    if (selectedTalk) return;
+    if (filteredTalks.length === 0) return;
+    setSelectedTalk(filteredTalks[0]);
+  }, [filteredTalks, selectedTalk]);
+
+  useEffect(() => {
+    if (!selectedTalk?.id) return;
+
+    const freshSelectedTalk = talks.find((talk) => talk.id === selectedTalk.id);
+    if (freshSelectedTalk) {
+      setSelectedTalk(freshSelectedTalk);
+    }
+    // This should only run after a fresh table load, not after every local edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [talks]);
+
+  const updateSelectedTalk = (patch: Partial<SessionTalk>) => {
+    setSelectedTalk((prev) => (prev ? { ...prev, ...patch } : prev));
+  };
+
+  const handleSelectTalkType = (slug: string | null) => {
+    setSelectedTalkTypeSlug(slug);
+    setSelectedTalk(null);
+  };
+
+  const handleNewTalk = () => {
+    const fallbackTypeSlug =
+      selectedTalkTypeSlug || displayTalkTypes[0]?.slug || talks[0]?.talk_type_slug || "";
+
+    const title = "New Session Talk";
+
+    setSelectedTalk({
+      id: "",
+      title,
+      slug: `${slugify(title)}-${Date.now().toString().slice(-5)}`,
+      talk_type_slug: fallbackTypeSlug,
+      topic_area: "",
+      member_summary: "",
+      coach_notes: "",
+      default_capacity: 25,
+      default_duration_minutes: 60,
+      status: "draft",
+      sort_order: filteredTalks.length + 1,
+    });
+  };
+
+  const buildTalkPayload = (talk: SessionTalk) => ({
+    title: talk.title.trim(),
+    slug: talk.slug.trim(),
+    talk_type_slug: talk.talk_type_slug.trim(),
+    topic_area: talk.topic_area?.trim() || "",
+    member_summary: talk.member_summary ?? "",
+    coach_notes: talk.coach_notes ?? "",
+    default_capacity: talk.default_capacity ?? null,
+    default_duration_minutes: talk.default_duration_minutes ?? null,
+    status: talk.status || "draft",
+    sort_order: talk.sort_order ?? null,
+    updated_at: new Date().toISOString(),
+  });
+
+  const handleSaveTalk = async () => {
+    if (!selectedTalk) return;
+
+    if (!selectedTalk.title?.trim()) {
+      alert("Session talk title is required.");
+      return;
+    }
+
+    if (!selectedTalk.slug?.trim()) {
+      alert("Session talk slug is required.");
+      return;
+    }
+
+    if (!selectedTalk.talk_type_slug?.trim()) {
+      alert("Talk type is required.");
+      return;
+    }
+
+    const payload = buildTalkPayload(selectedTalk);
+    setIsSaving(true);
+
+    if (!selectedTalk.id) {
+      const { data, error } = await supabase
+        .from("session_talks")
+        .insert(payload)
+        .select(
+          `id,
+           slug,
+           title,
+           talk_type_slug,
+           topic_area,
+           member_summary,
+           coach_notes,
+           default_capacity,
+           default_duration_minutes,
+           status,
+           sort_order,
+           created_at,
+           updated_at`
+        )
+        .single();
+
+      setIsSaving(false);
+
+      if (error) {
+        console.error("Error creating session talk:", error);
+        alert(`Error creating session talk: ${error.message}`);
+        return;
+      }
+
+      await refreshTalks();
+      setSelectedTalk(data as SessionTalk);
+      setSelectedTalkTypeSlug((data as SessionTalk).talk_type_slug || null);
+      alert("Session talk created.");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("session_talks")
+      .update(payload)
+      .eq("id", selectedTalk.id)
+      .select(
+        `id,
+         slug,
+         title,
+         talk_type_slug,
+         topic_area,
+         member_summary,
+         coach_notes,
+         default_capacity,
+         default_duration_minutes,
+         status,
+         sort_order,
+         created_at,
+         updated_at`
+      )
+      .single();
+
+    setIsSaving(false);
+
+    if (error) {
+      console.error("Error saving session talk:", error);
+      alert(`Error saving session talk: ${error.message}`);
+      return;
+    }
+
+    await refreshTalks();
+    setSelectedTalk(data as SessionTalk);
+    setSelectedTalkTypeSlug((data as SessionTalk).talk_type_slug || null);
+    alert("Session talk saved.");
+  };
+
+  const handleArchiveTalk = async () => {
+    if (!selectedTalk?.id) return;
+
+    const { error } = await supabase
+      .from("session_talks")
+      .update({ status: "archived", updated_at: new Date().toISOString() })
+      .eq("id", selectedTalk.id);
+
+    if (error) {
+      console.error("Error archiving session talk:", error);
+      alert(`Error archiving session talk: ${error.message}`);
+      return;
+    }
+
+    await refreshTalks();
+    setSelectedTalk(null);
+    alert("Session talk archived.");
+  };
+
+  const selectedTypeLabel = selectedTalkTypeSlug
+    ? talkTypeLabel(
+        displayTalkTypes.find((type) => type.slug === selectedTalkTypeSlug) || {
+          slug: selectedTalkTypeSlug,
+        }
+      )
+    : "All Talk Types";
+
+  return (
+    <div className="w-full px-4 py-4 md:px-6">
+      <div className="mx-auto w-full max-w-[1600px]">
+        <Panel>
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-semibold">Session Talks</h1>
+              <p className="text-sm opacity-70">
+                Staff access page for session_talks. Edit talk cards, member
+                summaries, coach notes, capacity, duration, status, and sort order.
+              </p>
+            </div>
+
+            <PortalButton onClick={refreshAll}>
+              {isLoading ? "Refreshing..." : "Refresh"}
+            </PortalButton>
+          </div>
+
+          {loadError && (
+            <div className="mb-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+              {loadError}
+            </div>
+          )}
+
+          <div className="grid min-h-[70vh] grid-cols-12 gap-4">
+            <div className="col-span-12 rounded-xl border p-4 lg:col-span-2">
+              <h2 className="mb-2 text-sm font-semibold uppercase opacity-70">
+                Talk Types
+              </h2>
+
+              <div className="space-y-2">
+                <PortalButton
+                  onClick={() => handleSelectTalkType(null)}
+                  active={!selectedTalkTypeSlug}
+                  className="block w-full text-left"
+                >
+                  All ({talks.length})
+                </PortalButton>
+
+                {displayTalkTypes.map((type) => {
+                  const count = talks.filter(
+                    (talk) => talk.talk_type_slug === type.slug
+                  ).length;
+
+                  return (
+                    <PortalButton
+                      key={type.id ?? type.slug}
+                      onClick={() => handleSelectTalkType(type.slug)}
+                      active={selectedTalkTypeSlug === type.slug}
+                      className="block w-full text-left"
+                    >
+                      {talkTypeLabel(type)} ({count})
+                    </PortalButton>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="col-span-12 rounded-xl border p-4 lg:col-span-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold uppercase opacity-70">
+                    Session Talks
+                  </h2>
+                  <p className="text-xs opacity-60">{selectedTypeLabel}</p>
+                </div>
+              </div>
+
+              <PortalButton onClick={handleNewTalk}>+ New Session Talk</PortalButton>
+
+              <div className="mt-4 space-y-2">
+                {filteredTalks.map((talk) => (
+                  <PortalButton
+                    key={talk.id}
+                    onClick={() => setSelectedTalk(talk)}
+                    active={selectedTalk?.id === talk.id}
+                    className="block w-full text-left"
+                  >
+                    <div className="font-medium">{talk.title}</div>
+                    <div className="text-xs opacity-70">
+                      {talk.topic_area || "No topic area"} · {talk.talk_type_slug}
+                    </div>
+                    <div className="text-xs opacity-60">
+                      {talk.status || "No status"} · Sort {talk.sort_order ?? "—"}
+                    </div>
+                  </PortalButton>
+                ))}
+
+                {!isLoading && filteredTalks.length === 0 && (
+                  <div className="rounded-lg border p-3 text-sm opacity-60">
+                    No rows found in session_talks for this talk type.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="col-span-12 rounded-xl border p-4 lg:col-span-7">
+              {selectedTalk ? (
+                <>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 className="text-sm font-semibold uppercase opacity-70">
+                      Edit session_talks row
+                    </h2>
+
+                    {selectedTalk.id && (
+                      <PortalButton onClick={handleArchiveTalk}>Archive</PortalButton>
+                    )}
+                  </div>
+
+                  <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <label className="text-sm">
+                      <span className="mb-1 block font-medium">Title</span>
+                      <input
+                        className="h-[44px] w-full rounded-lg border px-3 py-2"
+                        value={selectedTalk.title ?? ""}
+                        onChange={(event) => {
+                          const title = event.target.value;
+                          updateSelectedTalk({
+                            title,
+                            slug: selectedTalk.id ? selectedTalk.slug : slugify(title),
+                          });
+                        }}
+                        placeholder="Session talk title"
+                      />
+                    </label>
+
+                    <label className="text-sm">
+                      <span className="mb-1 block font-medium">Slug</span>
+                      <input
+                        className="h-[44px] w-full rounded-lg border px-3 py-2"
+                        value={selectedTalk.slug ?? ""}
+                        onChange={(event) =>
+                          updateSelectedTalk({ slug: slugify(event.target.value) })
+                        }
+                        placeholder="slug"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <label className="text-sm">
+                      <span className="mb-1 block font-medium">Talk Type</span>
+                      <select
+                        className="h-[44px] w-full rounded-lg border px-3 py-2"
+                        value={selectedTalk.talk_type_slug ?? ""}
+                        onChange={(event) =>
+                          updateSelectedTalk({ talk_type_slug: event.target.value })
+                        }
+                      >
+                        <option value="">Select talk type</option>
+                        {displayTalkTypes.map((type) => (
+                          <option key={type.id ?? type.slug} value={type.slug}>
+                            {talkTypeLabel(type)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="text-sm">
+                      <span className="mb-1 block font-medium">Topic Area</span>
+                      <input
+                        className="h-[44px] w-full rounded-lg border px-3 py-2"
+                        value={selectedTalk.topic_area ?? ""}
+                        onChange={(event) =>
+                          updateSelectedTalk({ topic_area: event.target.value })
+                        }
+                        placeholder="Topic area"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-4">
+                    <label className="text-sm">
+                      <span className="mb-1 block font-medium">Status</span>
+                      <select
+                        className="h-[44px] w-full rounded-lg border px-3 py-2"
+                        value={selectedTalk.status ?? "draft"}
+                        onChange={(event) =>
+                          updateSelectedTalk({ status: event.target.value })
+                        }
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="active">Active</option>
+                        <option value="published">Published</option>
+                        <option value="hidden">Hidden</option>
+                        <option value="archived">Archived</option>
+                      </select>
+                    </label>
+
+                    <label className="text-sm">
+                      <span className="mb-1 block font-medium">Sort Order</span>
+                      <input
+                        className="h-[44px] w-full rounded-lg border px-3 py-2"
+                        type="number"
+                        value={selectedTalk.sort_order ?? ""}
+                        onChange={(event) =>
+                          updateSelectedTalk({
+                            sort_order: numberOrNull(event.target.value),
+                          })
+                        }
+                        placeholder="Sort"
+                      />
+                    </label>
+
+                    <label className="text-sm">
+                      <span className="mb-1 block font-medium">Capacity</span>
+                      <input
+                        className="h-[44px] w-full rounded-lg border px-3 py-2"
+                        type="number"
+                        value={selectedTalk.default_capacity ?? ""}
+                        onChange={(event) =>
+                          updateSelectedTalk({
+                            default_capacity: numberOrNull(event.target.value),
+                          })
+                        }
+                        placeholder="Capacity"
+                      />
+                    </label>
+
+                    <label className="text-sm">
+                      <span className="mb-1 block font-medium">Duration</span>
+                      <input
+                        className="h-[44px] w-full rounded-lg border px-3 py-2"
+                        type="number"
+                        value={selectedTalk.default_duration_minutes ?? ""}
+                        onChange={(event) =>
+                          updateSelectedTalk({
+                            default_duration_minutes: numberOrNull(
+                              event.target.value
+                            ),
+                          })
+                        }
+                        placeholder="Minutes"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="mb-3 block text-sm">
+                    <span className="mb-1 block font-medium">Member Summary</span>
+                    <textarea
+                      className="w-full rounded-lg border px-3 py-2"
+                      rows={6}
+                      value={selectedTalk.member_summary ?? ""}
+                      onChange={(event) =>
+                        updateSelectedTalk({ member_summary: event.target.value })
+                      }
+                      placeholder="This is the summary members see for this session talk."
+                    />
+                  </label>
+
+                  <label className="mb-4 block text-sm">
+                    <span className="mb-1 block font-medium">Coach Notes</span>
+                    <textarea
+                      className="w-full rounded-lg border px-3 py-2"
+                      rows={5}
+                      value={selectedTalk.coach_notes ?? ""}
+                      onChange={(event) =>
+                        updateSelectedTalk({ coach_notes: event.target.value })
+                      }
+                      placeholder="Internal staff notes for this talk."
+                    />
+                  </label>
+
+                  <div className="mb-4 rounded-xl border p-4">
+                    <h3 className="mb-2 text-sm font-semibold uppercase opacity-70">
+                      User Card Preview
+                    </h3>
+                    <div className="rounded-lg border p-4">
+                      <div className="text-lg font-semibold">
+                        {selectedTalk.title || "Session talk title"}
+                      </div>
+                      <div className="mt-1 text-sm opacity-70">
+                        {selectedTalk.topic_area || "Topic area"} ·{" "}
+                        {selectedTalk.talk_type_slug || "talk type"}
+                      </div>
+                      <p className="mt-3 text-sm">
+                        {selectedTalk.member_summary ||
+                          "The member summary will appear here."}
+                      </p>
+                      <div className="mt-3 text-xs opacity-60">
+                        {selectedTalk.default_duration_minutes ?? "—"} minutes ·{" "}
+                        {selectedTalk.default_capacity ?? "—"} seats ·{" "}
+                        {selectedTalk.status || "No status"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <PortalButton onClick={handleSaveTalk}>
+                    {isSaving ? "Saving..." : "Save Session Talk"}
+                  </PortalButton>
+                </>
+              ) : (
+                <div className="opacity-60">
+                  {isLoading
+                    ? "Loading session_talks..."
+                    : "Select a session talk to edit."}
+                </div>
+              )}
+            </div>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}

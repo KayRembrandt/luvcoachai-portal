@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
-import { Panel } from "@/components/Panel";
-import PortalButton from "@/components/ui/PortalButton";
+import { PortalIcon } from "@/components/portal/PortalIcon";
+import styles from "./session-talks.module.css";
 
 type TalkType = {
   id?: string;
@@ -62,6 +62,35 @@ const numberOrNull = (value: string) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 };
+
+/** Presentation helpers only. Persistence and selection logic below are unchanged. */
+function TalkField({
+  id,
+  label,
+  hint,
+  children,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={styles.field}>
+      <label htmlFor={id}>{label}</label>
+      {children}
+      {hint && <p id={`${id}-hint`} className={styles.fieldHint}>{hint}</p>}
+    </div>
+  );
+}
+
+function TalkStatus({ value }: { value: string | null }) {
+  return (
+    <span className={styles.status} data-status={value?.toLowerCase() || "unknown"}>
+      {value ? titleizeSlug(value) : "No status"}
+    </span>
+  );
+}
 
 export default function SessionTalksPage() {
   const supabase = supabaseBrowser;
@@ -356,186 +385,290 @@ export default function SessionTalksPage() {
       )
     : "All Talk Types";
 
+  // Resolve the label for display only; the database still stores talk_type_slug.
+  const selectedTalkTypeLabel = selectedTalk
+    ? talkTypeLabel(
+        displayTalkTypes.find((type) => type.slug === selectedTalk.talk_type_slug) || {
+          slug: selectedTalk.talk_type_slug || "",
+        }
+      )
+    : "";
+
   return (
-    <div className="w-full px-4 py-4 md:px-6">
-      <div className="mx-auto w-full max-w-[1600px]">
-        <Panel>
-          <div className="mb-4 flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-semibold">Session Talks</h1>
-              <p className="text-sm opacity-70">
-                Staff access page for session_talks. Edit talk cards, member
-                summaries, coach notes, capacity, duration, status, and sort order.
-              </p>
-            </div>
-
-            <PortalButton onClick={refreshAll}>
-              {isLoading ? "Refreshing..." : "Refresh"}
-            </PortalButton>
+    <div className={styles.page}>
+      {/* Compact heading. The writing area gets the room, not a large banner. */}
+      <header className={styles.pageHeader}>
+        <div className={styles.headingGroup}>
+          <span className={styles.headingIcon} aria-hidden="true">
+            <PortalIcon name="chat" />
+          </span>
+          <div>
+            <h1>Session Talks</h1>
+            <p>Shape the conversation. Prepare the details and the member summary.</p>
           </div>
+        </div>
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          onClick={() => void refreshAll()}
+          disabled={isLoading || isSaving}
+        >
+          <PortalIcon name="refresh" />
+          {isLoading ? "Refreshing…" : "Refresh"}
+        </button>
+      </header>
 
-          {loadError && (
-            <div className="mb-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-              {loadError}
+      {loadError && (
+        <div className={styles.error} role="alert">
+          <PortalIcon name="alert" />
+          <p>{loadError}</p>
+        </div>
+      )}
+
+      <div className={styles.workspace}>
+        {/* 1. Talk types — filtering uses the existing table and fallback types. */}
+        <section className={styles.listPanel} aria-labelledby="talk-types-heading">
+          <div className={styles.panelHeading} data-tone="indigo">
+            <span className={styles.stepNumber}>1</span>
+            <div>
+              <h2 id="talk-types-heading">Talk Types</h2>
+              <p>Choose a conversation format.</p>
+            </div>
+          </div>
+          <ul className={styles.typeList} aria-label="Filter session talks">
+            <li>
+              <button
+                type="button"
+                className={styles.typeButton}
+                data-active={!selectedTalkTypeSlug}
+                aria-pressed={!selectedTalkTypeSlug}
+                onClick={() => handleSelectTalkType(null)}
+                disabled={isSaving || isLoading}
+              >
+                <PortalIcon name="chat" />
+                <span className={styles.typeName}>All Talk Types</span>
+                <span className={styles.count}>{talks.length}</span>
+              </button>
+            </li>
+            {displayTalkTypes.map((type) => {
+              const count = talks.filter(
+                (talk) => talk.talk_type_slug === type.slug
+              ).length;
+              const active = selectedTalkTypeSlug === type.slug;
+
+              return (
+                <li key={type.id ?? type.slug}>
+                  <button
+                    type="button"
+                    className={styles.typeButton}
+                    data-active={active}
+                    aria-pressed={active}
+                    onClick={() => handleSelectTalkType(type.slug)}
+                    disabled={isSaving || isLoading}
+                  >
+                    <PortalIcon name="chat" />
+                    <span className={styles.typeName}>{talkTypeLabel(type)}</span>
+                    <span className={styles.count}>{count}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className={styles.panelNote}>
+            <PortalIcon name="info" />
+            <p>Filter by talk type, then choose a session talk to edit.</p>
+          </div>
+        </section>
+
+        {/* 2. Talks — counts, status and ordering all come from the loaded records. */}
+        <section className={styles.listPanel} aria-labelledby="talk-library-heading">
+          <div className={styles.panelHeading} data-tone="coral">
+            <span className={styles.stepNumber}>2</span>
+            <div>
+              <h2 id="talk-library-heading">Session Talks</h2>
+              <p>{selectedTypeLabel}</p>
+            </div>
+          </div>
+          <div className={styles.listToolbar}>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={handleNewTalk}
+              disabled={isSaving || isLoading}
+            >
+              <span className={styles.plus} aria-hidden="true">+</span>
+              New Session Talk
+            </button>
+            <p className={styles.listCount} role="status">
+              {isLoading
+                ? "Loading session talks…"
+                : `${filteredTalks.length} ${filteredTalks.length === 1 ? "talk" : "talks"} in this view`}
+            </p>
+          </div>
+          <ul className={styles.talkList} aria-label="Session talks">
+            {filteredTalks.map((talk) => {
+              const active = selectedTalk?.id === talk.id;
+              const typeName = talkTypeLabel(
+                displayTalkTypes.find((type) => type.slug === talk.talk_type_slug) || {
+                  slug: talk.talk_type_slug || "",
+                }
+              );
+
+              return (
+                <li key={talk.id}>
+                  <button
+                    type="button"
+                    className={styles.talkButton}
+                    data-active={active}
+                    aria-pressed={active}
+                    disabled={isSaving || isLoading}
+                    onClick={() => setSelectedTalk(talk)}
+                  >
+                    <span className={styles.talkTopline}>
+                      <span className={styles.order}>Sort {talk.sort_order ?? "—"}</span>
+                      <TalkStatus value={talk.status} />
+                    </span>
+                    <span className={styles.talkTitle}>{talk.title}</span>
+                    <span className={styles.talkTopic}>{talk.topic_area || "No topic area"}</span>
+                    <span className={styles.talkType}>{typeName}</span>
+                    <span className={styles.openLabel}>
+                      {active ? "Editing this talk" : "Open talk"}
+                      <PortalIcon name={active ? "check" : "arrowRight"} />
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {!isLoading && filteredTalks.length === 0 && (
+            <div className={styles.smallEmpty}>
+              <PortalIcon name="chat" />
+              <p>No session talks in this view yet. Create one to begin.</p>
             </div>
           )}
+          <div className={styles.panelNote}>
+            <PortalIcon name="info" />
+            <p>Save your edits before changing talks or refreshing.</p>
+          </div>
+        </section>
 
-          <div className="grid min-h-[70vh] grid-cols-12 gap-4">
-            <div className="col-span-12 rounded-xl border p-4 lg:col-span-2">
-              <h2 className="mb-2 text-sm font-semibold uppercase opacity-70">
-                Talk Types
-              </h2>
-
-              <div className="space-y-2">
-                <PortalButton
-                  onClick={() => handleSelectTalkType(null)}
-                  active={!selectedTalkTypeSlug}
-                  className="block w-full text-left"
-                >
-                  All ({talks.length})
-                </PortalButton>
-
-                {displayTalkTypes.map((type) => {
-                  const count = talks.filter(
-                    (talk) => talk.talk_type_slug === type.slug
-                  ).length;
-
-                  return (
-                    <PortalButton
-                      key={type.id ?? type.slug}
-                      onClick={() => handleSelectTalkType(type.slug)}
-                      active={selectedTalkTypeSlug === type.slug}
-                      className="block w-full text-left"
+        {/* 3. The editor keeps every original field and save/archive handler. */}
+        <section className={styles.editorPanel} aria-labelledby="talk-editor-heading">
+          {selectedTalk ? (
+            <>
+              <div className={styles.editorHeading}>
+                <div className={styles.editorTitleGroup}>
+                  <PortalIcon name="clipboard" />
+                  <div>
+                    <p className={styles.eyebrow}>
+                      {selectedTalk.id ? "Edit session talk" : "New session talk · Not saved yet"}
+                    </p>
+                    <h2 id="talk-editor-heading">
+                      {selectedTalk.title || "Untitled session talk"}
+                    </h2>
+                  </div>
+                </div>
+                <div className={styles.editorActions}>
+                  <button
+                    type="button"
+                    className={styles.primaryButton}
+                    onClick={() => void handleSaveTalk()}
+                    disabled={isSaving || isLoading}
+                  >
+                    <PortalIcon name="check" />
+                    {isSaving ? "Saving…" : "Save Session Talk"}
+                  </button>
+                  {selectedTalk.id && (
+                    <button
+                      type="button"
+                      className={styles.archiveButton}
+                      onClick={() => void handleArchiveTalk()}
+                      disabled={isSaving || isLoading}
                     >
-                      {talkTypeLabel(type)} ({count})
-                    </PortalButton>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="col-span-12 rounded-xl border p-4 lg:col-span-3">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold uppercase opacity-70">
-                    Session Talks
-                  </h2>
-                  <p className="text-xs opacity-60">{selectedTypeLabel}</p>
+                      Archive
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <PortalButton onClick={handleNewTalk}>+ New Session Talk</PortalButton>
+              <fieldset className={styles.editorFields} disabled={isSaving || isLoading}>
+                <legend className={styles.visuallyHidden}>Session talk details</legend>
 
-              <div className="mt-4 space-y-2">
-                {filteredTalks.map((talk) => (
-                  <PortalButton
-                    key={talk.id}
-                    onClick={() => setSelectedTalk(talk)}
-                    active={selectedTalk?.id === talk.id}
-                    className="block w-full text-left"
-                  >
-                    <div className="font-medium">{talk.title}</div>
-                    <div className="text-xs opacity-70">
-                      {talk.topic_area || "No topic area"} · {talk.talk_type_slug}
-                    </div>
-                    <div className="text-xs opacity-60">
-                      {talk.status || "No status"} · Sort {talk.sort_order ?? "—"}
-                    </div>
-                  </PortalButton>
-                ))}
-
-                {!isLoading && filteredTalks.length === 0 && (
-                  <div className="rounded-lg border p-3 text-sm opacity-60">
-                    No rows found in session_talks for this talk type.
+                <div className={styles.sectionHeading}>
+                  <span className={styles.sectionIcon} data-tone="indigo"><PortalIcon name="calendar" /></span>
+                  <div>
+                    <h3>Talk details</h3>
+                    <p>Set the title, format and topic.</p>
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
 
-            <div className="col-span-12 rounded-xl border p-4 lg:col-span-7">
-              {selectedTalk ? (
-                <>
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <h2 className="text-sm font-semibold uppercase opacity-70">
-                      Edit session_talks row
-                    </h2>
+                <TalkField id="talk-title" label="Title">
+                  <input
+                    id="talk-title"
+                    className={styles.control}
+                    value={selectedTalk.title ?? ""}
+                    onChange={(event) => {
+                      const title = event.target.value;
+                      updateSelectedTalk({
+                        title,
+                        slug: selectedTalk.id ? selectedTalk.slug : slugify(title),
+                      });
+                    }}
+                    placeholder="Session talk title"
+                  />
+                </TalkField>
 
-                    {selectedTalk.id && (
-                      <PortalButton onClick={handleArchiveTalk}>Archive</PortalButton>
-                    )}
-                  </div>
+                <TalkField
+                  id="talk-slug"
+                  label="Slug"
+                  hint="The saved identifier for this talk. New titles generate a slug until the talk is first saved."
+                >
+                  <input
+                    id="talk-slug"
+                    className={styles.control}
+                    value={selectedTalk.slug ?? ""}
+                    onChange={(event) => updateSelectedTalk({ slug: slugify(event.target.value) })}
+                    placeholder="session-talk-slug"
+                    aria-describedby="talk-slug-hint"
+                  />
+                </TalkField>
 
-                  <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <label className="text-sm">
-                      <span className="mb-1 block font-medium">Title</span>
-                      <input
-                        className="h-[44px] w-full rounded-lg border px-3 py-2"
-                        value={selectedTalk.title ?? ""}
-                        onChange={(event) => {
-                          const title = event.target.value;
-                          updateSelectedTalk({
-                            title,
-                            slug: selectedTalk.id ? selectedTalk.slug : slugify(title),
-                          });
-                        }}
-                        placeholder="Session talk title"
-                      />
-                    </label>
+                <div className={styles.fieldRow}>
+                  <TalkField id="talk-type" label="Talk Type">
+                    <select
+                      id="talk-type"
+                      className={styles.control}
+                      value={selectedTalk.talk_type_slug ?? ""}
+                      onChange={(event) => updateSelectedTalk({ talk_type_slug: event.target.value })}
+                    >
+                      <option value="">Select talk type</option>
+                      {displayTalkTypes.map((type) => (
+                        <option key={type.id ?? type.slug} value={type.slug}>
+                          {talkTypeLabel(type)}
+                        </option>
+                      ))}
+                    </select>
+                  </TalkField>
+                  <TalkField id="talk-topic" label="Topic Area">
+                    <input
+                      id="talk-topic"
+                      className={styles.control}
+                      value={selectedTalk.topic_area ?? ""}
+                      onChange={(event) => updateSelectedTalk({ topic_area: event.target.value })}
+                      placeholder="Topic area"
+                    />
+                  </TalkField>
+                </div>
 
-                    <label className="text-sm">
-                      <span className="mb-1 block font-medium">Slug</span>
-                      <input
-                        className="h-[44px] w-full rounded-lg border px-3 py-2"
-                        value={selectedTalk.slug ?? ""}
-                        onChange={(event) =>
-                          updateSelectedTalk({ slug: slugify(event.target.value) })
-                        }
-                        placeholder="slug"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <label className="text-sm">
-                      <span className="mb-1 block font-medium">Talk Type</span>
+                <div className={styles.settingsBox}>
+                  <h3>Session settings</h3>
+                  <div className={styles.settingsGrid}>
+                    <TalkField id="talk-status" label="Status">
                       <select
-                        className="h-[44px] w-full rounded-lg border px-3 py-2"
-                        value={selectedTalk.talk_type_slug ?? ""}
-                        onChange={(event) =>
-                          updateSelectedTalk({ talk_type_slug: event.target.value })
-                        }
-                      >
-                        <option value="">Select talk type</option>
-                        {displayTalkTypes.map((type) => (
-                          <option key={type.id ?? type.slug} value={type.slug}>
-                            {talkTypeLabel(type)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="text-sm">
-                      <span className="mb-1 block font-medium">Topic Area</span>
-                      <input
-                        className="h-[44px] w-full rounded-lg border px-3 py-2"
-                        value={selectedTalk.topic_area ?? ""}
-                        onChange={(event) =>
-                          updateSelectedTalk({ topic_area: event.target.value })
-                        }
-                        placeholder="Topic area"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-4">
-                    <label className="text-sm">
-                      <span className="mb-1 block font-medium">Status</span>
-                      <select
-                        className="h-[44px] w-full rounded-lg border px-3 py-2"
+                        id="talk-status"
+                        className={styles.control}
                         value={selectedTalk.status ?? "draft"}
-                        onChange={(event) =>
-                          updateSelectedTalk({ status: event.target.value })
-                        }
+                        onChange={(event) => updateSelectedTalk({ status: event.target.value })}
                       >
                         <option value="draft">Draft</option>
                         <option value="active">Active</option>
@@ -543,120 +676,155 @@ export default function SessionTalksPage() {
                         <option value="hidden">Hidden</option>
                         <option value="archived">Archived</option>
                       </select>
-                    </label>
-
-                    <label className="text-sm">
-                      <span className="mb-1 block font-medium">Sort Order</span>
+                    </TalkField>
+                    <TalkField id="talk-sort" label="Sort Order">
                       <input
-                        className="h-[44px] w-full rounded-lg border px-3 py-2"
+                        id="talk-sort"
+                        className={styles.control}
                         type="number"
                         value={selectedTalk.sort_order ?? ""}
-                        onChange={(event) =>
-                          updateSelectedTalk({
-                            sort_order: numberOrNull(event.target.value),
-                          })
-                        }
+                        onChange={(event) => updateSelectedTalk({ sort_order: numberOrNull(event.target.value) })}
                         placeholder="Sort"
                       />
-                    </label>
-
-                    <label className="text-sm">
-                      <span className="mb-1 block font-medium">Capacity</span>
+                    </TalkField>
+                    <TalkField id="talk-capacity" label="Capacity">
                       <input
-                        className="h-[44px] w-full rounded-lg border px-3 py-2"
+                        id="talk-capacity"
+                        className={styles.control}
                         type="number"
                         value={selectedTalk.default_capacity ?? ""}
-                        onChange={(event) =>
-                          updateSelectedTalk({
-                            default_capacity: numberOrNull(event.target.value),
-                          })
-                        }
-                        placeholder="Capacity"
+                        onChange={(event) => updateSelectedTalk({ default_capacity: numberOrNull(event.target.value) })}
+                        placeholder="Seats"
                       />
-                    </label>
-
-                    <label className="text-sm">
-                      <span className="mb-1 block font-medium">Duration</span>
+                    </TalkField>
+                    <TalkField id="talk-duration" label="Duration (minutes)">
                       <input
-                        className="h-[44px] w-full rounded-lg border px-3 py-2"
+                        id="talk-duration"
+                        className={styles.control}
                         type="number"
                         value={selectedTalk.default_duration_minutes ?? ""}
-                        onChange={(event) =>
-                          updateSelectedTalk({
-                            default_duration_minutes: numberOrNull(
-                              event.target.value
-                            ),
-                          })
-                        }
+                        onChange={(event) => updateSelectedTalk({ default_duration_minutes: numberOrNull(event.target.value) })}
                         placeholder="Minutes"
                       />
-                    </label>
+                    </TalkField>
                   </div>
+                </div>
 
-                  <label className="mb-3 block text-sm">
-                    <span className="mb-1 block font-medium">Member Summary</span>
-                    <textarea
-                      className="w-full rounded-lg border px-3 py-2"
-                      rows={6}
-                      value={selectedTalk.member_summary ?? ""}
-                      onChange={(event) =>
-                        updateSelectedTalk({ member_summary: event.target.value })
-                      }
-                      placeholder="This is the summary members see for this session talk."
-                    />
-                  </label>
-
-                  <label className="mb-4 block text-sm">
-                    <span className="mb-1 block font-medium">Coach Notes</span>
-                    <textarea
-                      className="w-full rounded-lg border px-3 py-2"
-                      rows={5}
-                      value={selectedTalk.coach_notes ?? ""}
-                      onChange={(event) =>
-                        updateSelectedTalk({ coach_notes: event.target.value })
-                      }
-                      placeholder="Internal staff notes for this talk."
-                    />
-                  </label>
-
-                  <div className="mb-4 rounded-xl border p-4">
-                    <h3 className="mb-2 text-sm font-semibold uppercase opacity-70">
-                      User Card Preview
-                    </h3>
-                    <div className="rounded-lg border p-4">
-                      <div className="text-lg font-semibold">
-                        {selectedTalk.title || "Session talk title"}
-                      </div>
-                      <div className="mt-1 text-sm opacity-70">
-                        {selectedTalk.topic_area || "Topic area"} ·{" "}
-                        {selectedTalk.talk_type_slug || "talk type"}
-                      </div>
-                      <p className="mt-3 text-sm">
-                        {selectedTalk.member_summary ||
-                          "The member summary will appear here."}
-                      </p>
-                      <div className="mt-3 text-xs opacity-60">
-                        {selectedTalk.default_duration_minutes ?? "—"} minutes ·{" "}
-                        {selectedTalk.default_capacity ?? "—"} seats ·{" "}
-                        {selectedTalk.status || "No status"}
-                      </div>
+                <div className={styles.writingSection}>
+                  <div className={styles.sectionHeading}>
+                    <span className={styles.sectionIcon} data-tone="coral"><PortalIcon name="chat" /></span>
+                    <div>
+                      <h3>Member-facing content</h3>
+                      <p>Describe what the conversation will explore.</p>
                     </div>
                   </div>
-
-                  <PortalButton onClick={handleSaveTalk}>
-                    {isSaving ? "Saving..." : "Save Session Talk"}
-                  </PortalButton>
-                </>
-              ) : (
-                <div className="opacity-60">
-                  {isLoading
-                    ? "Loading session_talks..."
-                    : "Select a session talk to edit."}
+                  <TalkField
+                    id="talk-summary"
+                    label="Member Summary"
+                    hint="The card preview below updates as you write. Edits are not saved automatically."
+                  >
+                    <textarea
+                      id="talk-summary"
+                      className={`${styles.control} ${styles.summaryInput}`}
+                      rows={9}
+                      value={selectedTalk.member_summary ?? ""}
+                      onChange={(event) => updateSelectedTalk({ member_summary: event.target.value })}
+                      placeholder="This is the summary members see for this session talk."
+                      aria-describedby="talk-summary-hint"
+                    />
+                  </TalkField>
                 </div>
+
+                <div className={styles.notesSection}>
+                  <div className={styles.sectionHeading}>
+                    <span className={styles.sectionIcon} data-tone="sage"><PortalIcon name="clipboard" /></span>
+                    <div>
+                      <h3>Coach preparation</h3>
+                      <p>Notes for this talk, separate from the member summary.</p>
+                    </div>
+                  </div>
+                  <TalkField
+                    id="talk-notes"
+                    label="Coach Notes"
+                    hint="Coach notes are not included in the card preview below."
+                  >
+                    <textarea
+                      id="talk-notes"
+                      className={`${styles.control} ${styles.notesInput}`}
+                      rows={6}
+                      value={selectedTalk.coach_notes ?? ""}
+                      onChange={(event) => updateSelectedTalk({ coach_notes: event.target.value })}
+                      placeholder="Internal staff notes for this talk."
+                      aria-describedby="talk-notes-hint"
+                    />
+                  </TalkField>
+                </div>
+
+                {/* A content preview, not a promise to reproduce the member app layout. */}
+                <section className={styles.previewSection} aria-labelledby="talk-preview-heading">
+                  <div className={styles.previewHeading}>
+                    <PortalIcon name="people" />
+                    <div>
+                      <h3 id="talk-preview-heading">User Card Preview</h3>
+                      <p>Current editor content. The member app layout may differ.</p>
+                    </div>
+                  </div>
+                  <article className={styles.previewCard}>
+                    <span className={styles.previewType}>
+                      <PortalIcon name="chat" />
+                      {selectedTalk.talk_type_slug ? selectedTalkTypeLabel : "Talk type"}
+                    </span>
+                    <h4>{selectedTalk.title || "Session talk title"}</h4>
+                    <p className={styles.previewTopic}>{selectedTalk.topic_area || "Topic area"}</p>
+                    <p className={styles.previewSummary}>
+                      {selectedTalk.member_summary || "The member summary will appear here."}
+                    </p>
+                    <div className={styles.previewMeta}>
+                      <span><PortalIcon name="clock" />{selectedTalk.default_duration_minutes ?? "—"} minutes</span>
+                      <span><PortalIcon name="people" />{selectedTalk.default_capacity ?? "—"} seats</span>
+                      <TalkStatus value={selectedTalk.status} />
+                    </div>
+                  </article>
+                </section>
+
+                <div className={styles.editorFooter}>
+                  <p>Save before changing talks or refreshing. This editor does not autosave.</p>
+                  <button
+                    type="button"
+                    className={styles.primaryButton}
+                    onClick={() => void handleSaveTalk()}
+                    disabled={isSaving || isLoading}
+                  >
+                    <PortalIcon name="check" />
+                    {isSaving ? "Saving…" : "Save Session Talk"}
+                  </button>
+                </div>
+              </fieldset>
+            </>
+          ) : (
+            <div className={styles.emptyEditor}>
+              <span className={styles.emptyIllustration} aria-hidden="true">
+                <span className={styles.illustrationBack} />
+                <span className={styles.illustrationFront}><PortalIcon name="chat" /></span>
+                <span className={styles.illustrationBadge}><PortalIcon name="heart" /></span>
+              </span>
+              <h2 id="talk-editor-heading">
+                {isLoading ? "Loading session talks…" : "A place to shape the conversation"}
+              </h2>
+              <p>
+                {isLoading
+                  ? "Please wait while your talk library loads."
+                  : "Choose a session talk, or create one. Give the member summary and your preparation notes room to grow."}
+              </p>
+              {!isLoading && (
+                <button type="button" className={styles.primaryButton} onClick={handleNewTalk}>
+                  <span className={styles.plus} aria-hidden="true">+</span>
+                  New Session Talk
+                </button>
               )}
             </div>
-          </div>
-        </Panel>
+          )}
+        </section>
       </div>
     </div>
   );

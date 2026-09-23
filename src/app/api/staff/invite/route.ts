@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabaseServer";
+
 import { createSupabaseServiceClient } from "@/lib/supabaseService";
 
 async function requireAdmin(userId: string) {
@@ -7,7 +7,7 @@ async function requireAdmin(userId: string) {
   const { data } = await svc
     .from("staff")
     .select("id, role, is_active")
-    .eq("id", userId)
+    .eq("user_id", userId)
     .eq("is_active", true)
     .maybeSingle();
 
@@ -15,7 +15,7 @@ async function requireAdmin(userId: string) {
 }
 
 export async function POST(req: Request) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServiceClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

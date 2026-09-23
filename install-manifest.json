@@ -1,0 +1,21 @@
+{
+  "version": "coaching-workspace-v1",
+  "project": "luvcoachai-portal",
+  "replacements": {
+    "src/components/TopNav.tsx": "abed2fb01a62e3b243b61cf3e780a5c1555a07497b4ebade27d4d1e0352797da",
+    "src/lib/portalStaffAccess.ts": "e1aae3f73fb0582c3c0367c65fcac80d5a215a03c45bb95b4ba4ba9210ad9e81"
+  },
+  "files": {
+    "src/app/api/coaching/route.ts": "8ac73348485a70b3ef7c5ea6708669341ea55b0eecd50ef2d899c44ffb7f1b31",
+    "src/app/coaching/page.tsx": "ad6c3882b5c129d810c01ed87ed42ec34972deaf8aa54858c77fd22df0f7d4d8",
+    "src/components/TopNav.tsx": "e75c575145987110b98f6e7851cc79bde4d5c32cdc708b8858f77cf55bf0f49b",
+    "src/components/coaching/CoachingNavLink.tsx": "09e3d851a95e0b67a8979d218700d88c8462396cae196d25c196bc3faabd6a47",
+    "src/components/coaching/Workspace.tsx": "abdea20b57faebda629efa21a89807529f5dba778ac25070686ce782679305c0",
+    "src/components/coaching/workspace.module.css": "bbbf2881dd5c8c1d8edc1a33c26eb1ea9849adca1ab71f406a8b2b5bb6cce763",
+    "src/lib/coaching/client.ts": "ee6c729b953153442d886ee8968c224d0431ac059fe8a771a423617f28aed6b7",
+    "src/lib/coaching/server.ts": "9baff839bd2a1f8eabc6c81998b71c814c83f45edeeff43f19f4d831e2c32cdf",
+    "src/lib/coaching/types.ts": "10dad639965967ea63ad4759442a9080c47dec075f54adbdaecc150bb2d183b2",
+    "src/lib/coaching/validate.ts": "8d7c4bd2a195714446ad92e76ea8be61f751ef49e8c6a525da874d7b76dd049d",
+    "src/lib/portalStaffAccess.ts": "e692eb1cd9f0ea654a9ab7f6056c6a11efb99d4b2cdc6a4f748b823bd489aecf"
+  }
+}

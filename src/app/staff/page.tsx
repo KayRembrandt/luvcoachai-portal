@@ -1,228 +1,320 @@
 "use client";
-
-import * as React from "react";
-import { supabaseBrowser as supabase } from "@/lib/supabaseBrowser";
-
-type StaffRole = "staff" | "henry" | "admin" | null;
-
-type StaffRow = {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  display_name: string | null;
-  role: "staff" | "henry" | "admin";
-  is_active: boolean;
-  created_at?: string | null;
-};
-
-type StaffListResponse = {
-  rows?: StaffRow[];
-  meRole?: StaffRole;
-  error?: string;
-};
-
-function roleLabel(role: StaffRow["role"]) {
-  if (role === "admin") return "Admin (can revoke access)";
-  if (role === "henry") return "Henry";
-  return "Staff";
-}
-
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { PortalIcon } from "@/components/portal/PortalIcon";
+import { errorMessage, staffRequest } from "@/lib/staffAccessClient";
+import { initials, isAdminRole, roleLabel, staffIsActive, staffName, type StaffListResponse, type StaffRecord } from "@/lib/staffAccessModel";
+import styles from "@/components/staff/staff.module.css";
 export default function StaffPage() {
-  const [meRole, setMeRole] = React.useState<StaffRole>(null);
-  const [rows, setRows] = React.useState<StaffRow[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [busyId, setBusyId] = React.useState<string | null>(null);
-
-  const isAdmin = meRole === "admin";
-
-async function load() {
-  setLoading(true);
-  setError(null);
-
-  try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    const token = session?.access_token ?? null;
-
-    const res = await fetch("/api/staff/list", {
-      method: "GET",
-      headers: token
-        ? {
-            Authorization: `Bearer ${token}`,
-          }
-        : {},
-      cache: "no-store",
+    const [data, setData] = useState<StaffListResponse | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [busy, setBusy] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
+    const [query, setQuery] = useState("");
+    const [filter, setFilter] = useState<"all" | "active" | "inactive">("all");
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const next = await staffRequest<StaffListResponse>("/api/staff/list");
+            if (!Array.isArray(next.rows))
+                throw new Error("The server returned an unexpected staff response.");
+            setData(next);
+        }
+        catch (failure) {
+            setError(errorMessage(failure));
+            setData(null);
+        }
+        finally {
+            setLoading(false);
+        }
+    }, []);
+    useEffect(() => {
+        void load();
+    }, [load]);
+    async function setStatus(row: StaffRecord) {
+        if (busy || loading || !data || isAdminRole(row.role) || row.id === data.meId)
+            return;
+        const next = !staffIsActive(row);
+        if (!window.confirm(`${next ? "Restore" : "Deactivate"} portal access for ${staffName(row)}? This changes the staff account status; it does not delete their login or content.`))
+            return;
+        setBusy(row.id);
+        setError(null);
+        setNotice(null);
+        try {
+            // Both status fields are changed by the administrator-only API, not by a
+            // browser table update. The server rechecks the record and its revision.
+            const result = await staffRequest<{
+                staff: StaffRecord;
+            }>("/api/staff/access", {
+                editor_version: "staff-access-v2", action: "set_status", id: row.id,
+                revision: row.revision, active: next,
+            }, "PATCH");
+            if (!result.staff?.revision)
+                throw new Error("The response was incomplete. Refresh before trying again.");
+            setData((previous) => previous ? { ...previous, rows: previous.rows.map((item) => item.id === row.id ? result.staff : item) } : previous);
+            setNotice(`${staffName(row)}: portal account ${next ? "restored" : "deactivated"}.`);
+        }
+        catch (failure) {
+            setError(errorMessage(failure));
+        }
+        finally {
+            setBusy(null);
+        }
+    }
+    const activeCount = data?.rows.filter(staffIsActive).length ?? 0;
+    const shown = (data?.rows ?? []).filter((row) => {
+        const statusMatch = filter === "all" || (filter === "active" ? staffIsActive(row) : !staffIsActive(row));
+        return statusMatch && `${staffName(row)} ${row.email ?? ""} ${roleLabel(row.role)}`.toLowerCase().includes(query.trim().toLowerCase());
     });
-
-    const json = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      setError(json?.error ?? "Failed to load staff");
-      setRows([]);
-      setMeRole(null);
-      setLoading(false);
-      return;
-    }
-
-    setRows(json.rows ?? []);
-    setMeRole(json.meRole ?? null);
-    setLoading(false);
-  } catch (err: any) {
-    setError(err?.message ?? "Failed to load staff");
-    setRows([]);
-    setMeRole(null);
-    setLoading(false);
-  }
-}
-
-  React.useEffect(() => {
-    void load();
-  }, []);
-
-  async function toggleActive(staffId: string, nextActive: boolean) {
-    if (!isAdmin) return;
-
-    setBusyId(staffId);
-    setError(null);
-
-    const { error: updErr } = await supabase
-      .from("staff")
-      .update({ is_active: nextActive })
-      .eq("id", staffId);
-
-    if (updErr) {
-      setError(updErr.message);
-      setBusyId(null);
-      return;
-    }
-
-    setRows((prev) =>
-      prev.map((r) => (r.id === staffId ? { ...r, is_active: nextActive } : r))
-    );
-    setBusyId(null);
-  }
-
-  return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Staff Members</h1>
-          <p className="text-sm text-slate-600 mt-1">
-            Active staff can log in. Admins can revoke or restore access.
-          </p>
-        </div>
-
-        <button
-          onClick={load}
-          className="text-sm px-4 py-2 rounded-full border border-slate-200 hover:bg-slate-50"
-          disabled={loading}
+    return (
+        <div
+            className={styles.page}
         >
-          {loading ? "Loading…" : "Refresh"}
-        </button>
-      </div>
-
-      {error && (
-        <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-900">
-          {error}
-        </div>
-      )}
-
-      <div className="mt-6 rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 text-sm text-slate-600">
-          {loading ? "Loading…" : `${rows.length} staff member(s)`}
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-slate-700">
-              <tr>
-                <th className="text-left font-medium px-5 py-3">Name</th>
-                <th className="text-left font-medium px-5 py-3">Role</th>
-                <th className="text-left font-medium px-5 py-3">Status</th>
-                <th className="text-right font-medium px-5 py-3">Access</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {!loading &&
-                rows.map((r) => {
-                  const name =
-                    r.display_name ||
-                    [r.first_name, r.last_name].filter(Boolean).join(" ") ||
-                    "(No name)";
-
-                  return (
-                    <tr key={r.id} className="hover:bg-slate-50/50">
-                      <td className="px-5 py-4">
-                        <div className="font-medium text-slate-900">{name}</div>
-                        <div className="text-xs text-slate-400">{r.id}</div>
-                      </td>
-
-                      <td className="px-5 py-4 text-slate-700">
-                        {roleLabel(r.role)}
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <span
-                          className={[
-                            "inline-flex items-center px-2.5 py-1 rounded-full text-xs border",
-                            r.is_active
-                              ? "bg-emerald-50 border-emerald-200 text-emerald-900"
-                              : "bg-slate-100 border-slate-200 text-slate-700",
-                          ].join(" ")}
+            <header
+                className={styles.pageHeader}
+            >
+                <div
+                    className={styles.headingGroup}
+                >
+                    <span
+                        className={styles.headingIcon}
+                    >
+                        <PortalIcon
+                            name="people"
+                        />
+                    </span>
+                    <div>
+                        <p
+                            className={styles.eyebrow}
                         >
-                          {r.is_active ? "Active" : "Revoked"}
+                            Administration
+                        </p>
+                        <h1>
+                            Staff Members
+                        </h1>
+                        <p>
+                            Your team, their roles, and their portal account status.
+                        </p>
+                    </div>
+                </div>
+                <div
+                    className={styles.actions}
+                >
+                    <Link
+                        href="/admin/staff-access"
+                        className={`${styles.button} ${styles.primary}`}
+                    >
+                        <PortalIcon
+                            name="person"
+                        />
+                        Add / manage staff
+                    </Link>
+                    <button
+                        type="button"
+                        className={styles.button}
+                        disabled={loading || !!busy}
+                        onClick={() => void load()}
+                    >
+                        <PortalIcon
+                            name="refresh"
+                        />
+                        {loading ? "Loading…" : "Refresh"}
+                    </button>
+                </div>
+            </header>
+            {error && <div
+                role="alert"
+                className={styles.error}
+            >
+                {error}
+            </div>}
+            {notice && <div
+                role="status"
+                className={styles.success}
+            >
+                {notice}
+            </div>}
+            <section
+                className={styles.panel}
+                aria-labelledby="staff-list-title"
+            >
+                <div
+                    className={styles.panelHeading}
+                >
+                    <div>
+                        <h2
+                            id="staff-list-title"
+                        >
+                            Staff directory
+                        </h2>
+                        <p>
+                            {data ? `${data.rows.length} returned · ${activeCount} active · ${data.rows.length - activeCount} inactive` : "Loading the administrator-only directory…"}
+                        </p>
+                    </div>
+                    <label
+                        className={styles.searchField}
+                    >
+                        <span
+                            className={styles.srOnly}
+                        >
+                            Find a staff member
                         </span>
-                      </td>
-
-                      <td className="px-5 py-4 text-right">
-                        {isAdmin ? (
-                          r.role === "admin" ? (
-                            <span className="text-xs text-slate-500">(Admin)</span>
-                          ) : (
-                            <button
-                              className={[
-                                "px-3 py-1.5 rounded-full text-sm border",
-                                r.is_active
-                                  ? "border-rose-200 text-rose-700 hover:bg-rose-50"
-                                  : "border-emerald-200 text-emerald-700 hover:bg-emerald-50",
-                              ].join(" ")}
-                              onClick={() => toggleActive(r.id, !r.is_active)}
-                              disabled={busyId === r.id}
+                        <PortalIcon
+                            name="search"
+                        />
+                        <input
+                            type="search"
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="Find name, email, or role"
+                        />
+                    </label>
+                </div>
+                <div
+                    className={styles.filterRow}
+                >
+                    {(["all", "active", "inactive"] as const).map((value) => <button
+                        key={value}
+                        type="button"
+                        className={styles.filter}
+                        aria-pressed={filter === value}
+                        onClick={() => setFilter(value)}
+                    >
+                        {value === "all" ? "All staff" : value === "active" ? "Active" : "Inactive"}
+                    </button>)}
+                </div>
+                {data?.staffLimitReached && <p
+                    className={styles.hint}
+                >
+                    Showing the first 1,000 returned records. Totals and filters apply to this list.
+                </p>}
+                <div
+                    className={styles.tableScroll}
+                    role="region"
+                    aria-label="Staff members"
+                    tabIndex={0}
+                >
+                    <table
+                        className={styles.table}
+                    >
+                        <thead>
+                            <tr>
+                                <th
+                                    scope="col"
+                                >
+                                    Staff member
+                                </th>
+                                <th
+                                    scope="col"
+                                >
+                                    Role
+                                </th>
+                                <th
+                                    scope="col"
+                                >
+                                    Account
+                                </th>
+                                <th
+                                    scope="col"
+                                >
+                                    Access management
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {shown.map((row) => {
+            const protectedRow = isAdminRole(row.role) || row.id === data?.meId;
+            return <tr
+                                key={row.id}
                             >
-                              {busyId === r.id
-                                ? "Working…"
-                                : r.is_active
-                                ? "Revoke"
-                                : "Restore"}
-                            </button>
-                          )
-                        ) : (
-                          <span className="text-xs text-slate-400">Admin only</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-
-              {!loading && rows.length === 0 && (
-                <tr>
-                  <td className="px-5 py-6 text-slate-500" colSpan={4}>
-                    No staff rows found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-
-          {loading && (
-            <div className="px-5 py-6 text-sm text-slate-500">Loading staff…</div>
-          )}
+                                <td>
+                                    <div
+                                        className={styles.person}
+                                    >
+                                        <span
+                                            className={styles.avatar}
+                                            aria-hidden="true"
+                                        >
+                                            {initials(staffName(row))}
+                                        </span>
+                                        <div>
+                                            <strong>
+                                                {staffName(row)}
+                                            </strong>
+                                            <span>
+                                                {row.email || "No email recorded"}
+                                            </span>
+                                            <small>
+                                                ID{" "}
+                                                {row.id}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    {roleLabel(row.role)}
+                                </td>
+                                <td>
+                                    <span
+                                        className={staffIsActive(row) ? styles.goodBadge : styles.neutralBadge}
+                                    >
+                                        {staffIsActive(row) ? "Active" : "Inactive"}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div
+                                        className={styles.actions}
+                                    >
+                                        <Link
+                                            className={styles.button}
+                                            href={`/admin/staff-access?staff=${encodeURIComponent(row.id)}#staff-editor`}
+                                        >
+                                            Manage access
+                                            <PortalIcon
+                                                name="arrowRight"
+                                            />
+                                        </Link>
+                                        {!protectedRow && <button
+                                            type="button"
+                                            className={styles.button}
+                                            disabled={loading || !!busy}
+                                            onClick={() => void setStatus(row)}
+                                        >
+                                            {busy === row.id ? "Updating…" : staffIsActive(row) ? "Deactivate" : "Restore"}
+                                        </button>}
+                                    </div>
+                                    {protectedRow && <small
+                                        className={styles.hint}
+                                    >
+                                        Protected administrator account
+                                    </small>}
+                                </td>
+                            </tr>;
+        })}
+                            {!shown.length && <tr>
+                                <td
+                                    colSpan={4}
+                                >
+                                    {loading ? "Loading staff…" : data ? "No staff match this view." : "Staff could not be loaded. Use Refresh after checking the error above."}
+                                </td>
+                            </tr>}
+                        </tbody>
+                    </table>
+                </div>
+                <p
+                    className={styles.privacyNote}
+                >
+                    <PortalIcon
+                        name="lock"
+                    />
+                    <span>
+                        Manage access opens the one shared Staff Access editor. Deactivation preserves saved work settings and coaching material.
+                    </span>
+                </p>
+            </section>
         </div>
-      </div>
-    </div>
-  );
+    );
 }
+

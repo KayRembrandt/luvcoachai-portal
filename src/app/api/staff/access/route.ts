@@ -1,53 +1,42 @@
-import { NextRequest, NextResponse } from "next/server";
-import { apiError, assertPortalAdmin, STAFF_SELECT, upsertStaffByEmail } from "@/lib/portalStaffAccess";
-
+import { NextRequest } from "next/server";
+import { 
+  accessOverview, 
+  createStaff, jsonResponse, 
+  readEditorBody, 
+  requireStaffAdmin, 
+  setStaffStatus, 
+  staffFailure, 
+  updateStaff, } from "@/lib/staffAccessAdmin";
 export const dynamic = "force-dynamic";
-
+export const runtime = "nodejs";
 export async function GET(req: NextRequest) {
-  try {
-    const { supabase } = await assertPortalAdmin(req);
-
-    const [staffResult, applicationsResult] = await Promise.all([
-      supabase
-        .from("staff")
-        .select(STAFF_SELECT)
-        .order("status", { ascending: true })
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("staff_applications")
-        .select(
-          "id,first_name,last_name,email,phone,request_role,why_joining,experience,values_alignment,status,created_at"
-        )
-        .or("status.is.null,status.eq.submitted,status.eq.pending,status.eq.new")
-        .order("created_at", { ascending: false }),
-    ]);
-
-    if (staffResult.error) throw staffResult.error;
-    if (applicationsResult.error) throw applicationsResult.error;
-
-    return NextResponse.json({
-      staff: staffResult.data || [],
-      applications: applicationsResult.data || [],
-    });
-  } catch (e) {
-    const { message, status } = apiError(e);
-    return NextResponse.json({ error: message }, { status });
-  }
+    try {
+        return jsonResponse(await accessOverview(await requireStaffAdmin(req)));
+    }
+    catch (error) {
+        return staffFailure(error);
+    }
 }
-
 export async function POST(req: NextRequest) {
-  try {
-    const { supabase } = await assertPortalAdmin(req);
-    const body = await req.json();
-
-    const staff = await upsertStaffByEmail(supabase, body, {
-      origin: req.nextUrl.origin,
-      inviteIfMissing: true,
-    });
-
-    return NextResponse.json({ staff });
-  } catch (e) {
-    const { message, status } = apiError(e);
-    return NextResponse.json({ error: message }, { status });
-  }
+    try {
+        const admin = await requireStaffAdmin(req);
+        const body = await readEditorBody(req);
+        return body.id
+            ? jsonResponse({ staff: await updateStaff(admin, body) })
+            : jsonResponse(await createStaff(admin, body, req.nextUrl.origin), 201);
+    }
+    catch (error) {
+        return staffFailure(error);
+    }
 }
+export async function PATCH(req: NextRequest) {
+    try {
+        const admin = await requireStaffAdmin(req);
+        const body = await readEditorBody(req);
+        return jsonResponse({ staff: await setStaffStatus(admin, body) });
+    }
+    catch (error) {
+        return staffFailure(error);
+    }
+}
+

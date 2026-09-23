@@ -240,7 +240,7 @@ export default function LoginPage() {
           If you’ve already been hired,{" "}
           <button
             type="button"
-            onClick={() => router.push("/apply")}
+            onClick={() => router.push("/create-access")}
             className="text-[#5B7CFA] underline hover:text-[#3F5FE0]"
           >
             create your access here.

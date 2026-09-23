@@ -1,0 +1,1036 @@
+/*
+ * Session Talks â€” page-local design.
+ * The outer page stays transparent: Ami's current background is inherited.
+ * No :root/body rules, shared palette replacements, external fonts or images.
+ * Secondary fills are quiet mixes of existing brand colors, not new swatches.
+ */
+
+.page {
+  --talk-blue: var(--brand-twilight-blue, #333092);
+  --talk-surface: var(--panel-bg, var(--brand-warm-cream, #F3EDE9));
+  --talk-text: var(--brand-slate, #4A4668);
+  --talk-ink: var(--brand-charcoal, #162731);
+  --talk-indigo: var(--brand-electric-indigo, #504ea4);
+  --talk-coral: var(--brand-warm-coral, #FBAF5F);
+  --talk-sage: var(--brand-sage-green, #6cb097);
+  --talk-green: var(--brand-evergreen-reserve, #2D6B52);
+  --talk-parchment: var(--brand-parchment, #F7EED4);
+  --talk-line: color-mix(in srgb, var(--talk-indigo) 30%, var(--talk-surface));
+  --talk-shadow: 0 0.2rem 1rem rgb(15 0 78 / 5%);
+
+  width: 100%;
+  min-width: 0;
+  color: var(--talk-text);
+  background: transparent;
+  font-family: var(--portal-font-body, Arial, sans-serif);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  container: session-talks / inline-size;
+  overflow-wrap: anywhere;
+}
+
+.page *,
+.page *::before,
+.page *::after {
+  box-sizing: border-box;
+}
+
+.page button,
+.page input,
+.page select,
+.page textarea {
+  font-family: inherit;
+}
+
+.page button {
+  cursor: pointer;
+}
+
+.page button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.page :is(button, input, select, textarea):focus-visible {
+  outline: 3px solid var(--talk-blue);
+  outline-offset: 3px;
+}
+
+.page svg {
+  flex: 0 0 auto;
+}
+
+/* Heading: compact enough that the first talk is not pushed off the screen. */
+.pageHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+  margin: 0 0 1.5rem;
+  padding: 0.25rem 0;
+}
+
+.headingGroup {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1 1 26rem;
+  min-width: 0;
+}
+
+.headingGroup > div {
+  min-width: 0;
+}
+
+.headingIcon {
+  display: grid;
+  place-items: center;
+  width: 3.6rem;
+  height: 3.6rem;
+  flex: 0 0 3.6rem;
+  border: 1px solid var(--talk-line);
+  border-radius: 1.1rem;
+  color: var(--talk-blue);
+  background: color-mix(in srgb, var(--talk-indigo) 30%, var(--talk-surface));
+  box-shadow: var(--talk-shadow);
+}
+
+.headingIcon svg {
+  width: 1.8rem;
+  height: 1.8rem;
+}
+
+.pageHeader h1 {
+  margin: 0;
+  color: var(--talk-blue);
+  font-family: var(--portal-font-heading, var(--portal-font-body, Arial, sans-serif));
+  font-size: clamp(1.9rem, 2vw + 0.6rem, 2.25rem);
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.pageHeader p {
+  margin: 0.4rem 0 0;
+  font-size: 1.125rem;
+  line-height: 1.55;
+}
+
+/* Three related work areas. The existing PortalShell sets the page width. */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.listPanel,
+.editorPanel {
+  min-width: 0;
+  border: 1px solid var(--talk-line);
+  border-radius: 1rem;
+  background: var(--talk-surface);
+  box-shadow: var(--talk-shadow);
+}
+
+.panelHeading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1.15rem;
+  border-bottom: 1px solid var(--talk-line);
+  border-radius: 1rem 1rem 0 0;
+}
+
+.panelHeading[data-tone="indigo"] {
+  background: color-mix(in srgb, var(--talk-indigo)50%, var(--talk-surface));
+}
+
+.panelHeading[data-tone="coral"] {
+  background: color-mix(in srgb, var(--talk-coral) 65%, var(--talk-surface));
+}
+
+.stepNumber {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--talk-line);
+  border-radius: 50%;
+  color: var(--talk-blue);
+  background: var(--talk-surface);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.panelHeading h2 {
+  margin: 0;
+  color: var(--talk-blue);
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.panelHeading p {
+  margin: 0.3rem 0 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Actual action buttons, rather than stretched input-shaped controls. */
+.page .primaryButton,
+.page .secondaryButton,
+.page .archiveButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  min-height: 2.9rem;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--talk-indigo);
+  border-radius: 0.7rem;
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.page .primaryButton {
+  color: var(--talk-surface);
+  background: var(--talk-blue);
+  border-color: var(--talk-blue);
+  box-shadow: 0 0.18rem 0.4rem rgb(15 0 78 / 12%);
+}
+
+.page .primaryButton:hover:not(:disabled) {
+  background: var(--brand-midnight-violet, #0F004E);
+}
+
+.page .secondaryButton {
+  color: var(--talk-blue);
+  background: var(--talk-surface);
+}
+
+.page .secondaryButton:hover:not(:disabled) {
+  background: var(--talk-parchment);
+  border-color: var(--talk-blue);
+}
+
+.page .archiveButton {
+  color: var(--talk-text);
+  background: transparent;
+  border-color: var(--talk-line);
+  box-shadow: none;
+}
+
+.page .archiveButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--talk-coral) 30%, var(--talk-surface));
+  border-color: var(--talk-indigo);
+}
+
+.primaryButton svg,
+.secondaryButton svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.plus {
+  font-size: 1.4rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+/* Type selectors and talk cards retain text labels at every screen size. */
+.typeList,
+.talkList {
+  list-style: none;
+  padding: 0.75rem;
+  margin: 0;
+  max-height: 26rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--talk-indigo) var(--talk-surface);
+}
+
+.typeList li,
+.talkList li {
+  padding: 0;
+  margin: 0 0 0.45rem;
+}
+
+.typeList li:last-child,
+.talkList li:last-child {
+  margin-bottom: 0;
+}
+
+.page .typeButton {
+  display: grid;
+  grid-template-columns: 1.15rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  min-height: 3.35rem;
+  padding: 0.75rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  background: var(--talk-surface);
+  color: var(--talk-text);
+  font-size: 1rem;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.typeButton > svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  color: var(--talk-blue);
+}
+
+.typeName {
+  min-width: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.count {
+  display: inline-block;
+  min-width: 1.8rem;
+  padding: 0.08rem 0.35rem;
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--talk-indigo) 30%, var(--talk-surface));
+  color: var(--talk-blue);
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.page .typeList li:nth-child(even) .typeButton,
+.page .talkList li:nth-child(even) .talkButton {
+  background: color-mix(in srgb, var(--talk-coral) 40%, var(--talk-surface));
+}
+
+.page .typeButton:hover:not(:disabled),
+.page .talkButton:hover:not(:disabled) {
+  border-color: var(--talk-indigo);
+}
+
+.page .typeList .typeButton[data-active="true"] {
+  background: var(--talk-blue);
+  color: var(--talk-surface);
+  box-shadow: 0 0.15rem 0.4rem rgb(15 0 78 / 10%);
+}
+
+.typeButton[data-active="true"] > svg {
+  color: var(--talk-surface);
+}
+
+.typeButton[data-active="true"] .count {
+  background: var(--talk-surface);
+}
+
+.panelNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--talk-line);
+}
+
+.panelNote svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.2rem;
+  color: var(--talk-blue);
+}
+
+.panelNote p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.listToolbar {
+  padding: 1rem 1rem 0.15rem;
+}
+
+.listToolbar .primaryButton {
+  width: 100%;
+}
+
+.listCount {
+  margin: 0.8rem 0 0;
+  font-size: 1rem;
+}
+
+.page .talkButton {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid var(--talk-line);
+  border-radius: 0.8rem;
+  color: var(--talk-text);
+  background: var(--talk-surface);
+  text-align: left;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.page .talkList .talkButton[data-active="true"] {
+  border-color: var(--talk-blue);
+  background: color-mix(in srgb, var(--talk-indigo) 30%, var(--talk-surface));
+  box-shadow: inset 3px 0 0 var(--talk-blue);
+}
+
+.talkTopline {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 0.25rem;
+}
+
+.order,
+.talkTopic,
+.talkType {
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+}
+
+.order {
+  color: var(--talk-blue);
+}
+
+.talkTitle {
+  color: var(--talk-blue);
+  font-size: 1.125rem;
+  font-weight: 800;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.openLabel {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.4rem;
+  color: var(--talk-blue);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.openLabel svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Status text stays explicit; a colored pill is never the only signal. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.08rem 0.5rem;
+  border: 1px solid var(--talk-line);
+  border-radius: 0.45rem;
+  color: var(--talk-text);
+  background: var(--talk-surface);
+  font-size: 1rem;
+  line-height: 1.5;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.status[data-status="published"],
+.status[data-status="active"] {
+  color: var(--talk-green);
+  background: color-mix(in srgb, var(--talk-sage) 30%, var(--talk-surface));
+  border-color: color-mix(in srgb, var(--talk-green) 58%, var(--talk-surface));
+}
+
+.status[data-status="draft"] {
+  background: var(--talk-parchment);
+}
+
+.status[data-status="archived"],
+.status[data-status="hidden"] {
+  background: color-mix(in srgb, var(--talk-indigo) 25%, var(--talk-surface));
+}
+
+.smallEmpty {
+  padding: 1rem 1.3rem 2rem;
+  font-size: 1.125rem;
+}
+
+.smallEmpty svg {
+  width: 2rem;
+  height: 2rem;
+  color: var(--talk-indigo);
+}
+
+.smallEmpty p {
+  margin: 0.65rem 0 0;
+}
+
+/* Wide, grouped editor. Form rows respond to this panel's own width. */
+.editorPanel {
+  container: session-editor / inline-size;
+}
+
+.editorHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.35rem;
+  border-bottom: 1px solid var(--talk-line);
+  border-radius: 1rem 1rem 0 0;
+  background: color-mix(in srgb, var(--talk-indigo) 25%, var(--talk-surface));
+}
+
+.editorTitleGroup {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex: 1 1 17rem;
+  min-width: 0;
+}
+
+.editorTitleGroup > svg {
+  width: 1.45rem;
+  height: 1.45rem;
+  margin-top: 0.2rem;
+  color: var(--talk-blue);
+}
+
+.editorTitleGroup > div {
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.editorHeading h2 {
+  margin: 0;
+  color: var(--talk-blue);
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.editorActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: 100%;
+}
+
+.editorFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.2rem;
+  min-width: 0;
+  padding: 1.4rem;
+  margin: 0;
+  border: 0;
+}
+
+.field {
+  display: grid;
+  gap: 0.4rem;
+  align-content: start;
+  min-width: 0;
+}
+
+.field > label {
+  color: var(--talk-blue);
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.page .control {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 3rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--talk-indigo);
+  border-radius: 0.6rem;
+  background: var(--input-bg, var(--talk-surface));
+  color: var(--input-text, var(--talk-ink));
+  font-size: 1.125rem;
+  line-height: 1.65;
+  box-shadow: inset 0 1px 3px rgb(15 0 78 / 3%);
+}
+
+.page .control:focus {
+  border-color: var(--talk-blue);
+}
+
+.page .control::placeholder {
+  color: var(--talk-text);
+  opacity: 0.9;
+}
+
+.page textarea.control {
+  resize: vertical;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.page textarea.summaryInput {
+  min-height: 16rem;
+  line-height: 1.8;
+}
+
+.page textarea.notesInput {
+  min-height: 11rem;
+  line-height: 1.8;
+}
+
+.fieldHint {
+  margin: 0;
+  color: var(--talk-text);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.fieldRow,
+.settingsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.settingsBox {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid var(--talk-line);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--talk-indigo) 20%, var(--talk-surface));
+}
+
+.settingsBox > h3 {
+  margin: 0;
+  color: var(--talk-blue);
+  font-size: 1.125rem;
+  font-weight: 800;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.sectionHeading > div,
+.previewHeading > div {
+  min-width: 0;
+}
+
+.sectionHeading h3 {
+  margin: 0;
+  color: var(--talk-blue);
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.sectionHeading p {
+  margin: 0.2rem 0 0;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.sectionIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--talk-indigo) 30%, var(--talk-surface));
+  color: var(--talk-blue);
+}
+
+.sectionIcon[data-tone="coral"] {
+  background: color-mix(in srgb, var(--talk-coral) 40%, var(--talk-surface));
+}
+
+.sectionIcon[data-tone="sage"] {
+  background: color-mix(in srgb, var(--talk-sage) 30%, var(--talk-surface));
+}
+
+.writingSection,
+.notesSection {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--talk-line);
+}
+
+/* Content preview keeps newlines and contains no coach-note rendering. */
+.previewSection {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--talk-line);
+}
+
+.previewHeading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.previewHeading > svg {
+  margin-top: 0.2rem;
+  color: var(--talk-blue);
+}
+
+.previewHeading h3 {
+  margin: 0;
+  color: var(--talk-blue);
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.previewHeading p {
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.previewCard {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  padding: 1.5rem;
+  border: 1px solid var(--talk-line);
+  border-radius: 1rem;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--talk-coral) 10%, var(--talk-surface)), var(--talk-surface) 65%);
+  box-shadow: var(--talk-shadow);
+}
+
+.previewCard::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0.25rem;
+  background: var(--talk-blue);
+}
+
+.previewType {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--talk-blue);
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.previewType svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.previewCard h4 {
+  margin: 0.65rem 0 0;
+  color: var(--talk-blue);
+  font-family: var(--portal-font-heading, var(--portal-font-body, Arial, sans-serif));
+  font-size: 1.65rem;
+  line-height: 1.35;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.previewTopic {
+  margin: 0.4rem 0 0;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.previewSummary {
+  margin: 1rem 0 0;
+  font-size: 1.125rem;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.previewMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--talk-line);
+  font-size: 1rem;
+}
+
+.previewMeta > span:not(.status) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.previewMeta svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--talk-blue);
+}
+
+.editorFooter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--talk-line);
+}
+
+.editorFooter p {
+  flex: 1 1 15rem;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+/* Empty/error states remain useful, rather than a blank tall rectangle. */
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.2rem;
+  margin: 0 0 1.25rem;
+  border: 1px solid var(--talk-indigo);
+  border-radius: 0.8rem;
+  color: var(--talk-ink);
+  background: var(--talk-parchment);
+}
+
+.error p {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.error svg {
+  color: var(--talk-blue);
+  margin-top: 0.15rem;
+}
+
+.emptyEditor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 28rem;
+  gap: 1rem;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.emptyEditor h2 {
+  margin: 0;
+  color: var(--talk-blue);
+  font-family: var(--portal-font-heading, var(--portal-font-body, Arial, sans-serif));
+  font-size: 1.8rem;
+  line-height: 1.4;
+}
+
+.emptyEditor > p {
+  max-width: 36ch;
+  margin: 0 0 0.4rem;
+  font-size: 1.125rem;
+  line-height: 1.75;
+}
+
+.emptyIllustration {
+  display: block;
+  position: relative;
+  width: 6rem;
+  height: 6rem;
+  margin-bottom: 1.2rem;
+}
+
+.illustrationBack,
+.illustrationFront {
+  position: absolute;
+  inset: 0;
+  border-radius: 1.4rem;
+}
+
+.illustrationBack {
+  background: color-mix(in srgb, var(--talk-coral) 24%, var(--talk-surface));
+  transform: rotate(-12deg);
+}
+
+.illustrationFront {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--talk-line);
+  background: color-mix(in srgb, var(--talk-indigo) 14%, var(--talk-surface));
+  color: var(--talk-blue);
+}
+
+.illustrationFront svg {
+  width: 3rem;
+  height: 3rem;
+  stroke-width: 1.4;
+}
+
+.illustrationBadge {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  right: -0.6rem;
+  bottom: -0.4rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--talk-line);
+  border-radius: 50%;
+  color: var(--talk-blue);
+  background: var(--talk-parchment);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Respond to actual available width, not a guessed desktop breakpoint. */
+@container session-talks (min-width: 38rem) {
+  .workspace {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .editorPanel {
+    grid-column: 1 / -1;
+  }
+}
+
+@container session-talks (min-width: 72rem) {
+  .workspace {
+    grid-template-columns: 15.25rem 18.5rem minmax(0, 1fr);
+  }
+
+  .editorPanel {
+    grid-column: auto;
+  }
+
+  .typeList,
+  .talkList {
+    max-height: 39rem;
+  }
+}
+
+@container session-editor (min-width: 29rem) {
+  .fieldRow,
+  .settingsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container session-editor (min-width: 44rem) {
+  .settingsGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* At very narrow widths or large text sizes, let icon headings stack. */
+@container session-talks (max-width: 26rem) {
+  .headingGroup {
+    flex-wrap: wrap;
+  }
+
+  .headingGroup > div {
+    flex: 1 1 14rem;
+  }
+}
+
+@container session-editor (max-width: 24rem) {
+  .sectionHeading,
+  .previewHeading {
+    flex-wrap: wrap;
+  }
+
+  .sectionHeading > div,
+  .previewHeading > div {
+    flex: 1 1 14rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .headingGroup {
+    align-items: flex-start;
+  }
+
+  .headingIcon {
+    width: 3rem;
+    height: 3rem;
+    flex-basis: 3rem;
+  }
+
+  .editorHeading,
+  .editorFields {
+    padding: 1rem;
+  }
+
+  .previewCard {
+    padding: 1.2rem;
+  }
+
+  .typeList,
+  .talkList {
+    max-height: 21rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .primaryButton,
+  .secondaryButton,
+  .archiveButton,
+  .typeButton,
+  .talkButton {
+    transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  }
+}

@@ -154,53 +154,75 @@ export default function PortalShell({
     };
   }, [isPublicRoute, router]);
 
+  // Public routes keep their existing page layout and access behavior.
   if (isPublicRoute) {
     return <>{children}</>;
   }
 
   if (checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm text-center">
-          <h1 className="text-lg font-semibold text-slate-900">
-            Checking portal access…
-          </h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Please wait while we verify your staff access.
-          </p>
-        </div>
+      <div className="portal-access-screen">
+        <section
+          className="portal-access-card"
+          aria-labelledby="portal-access-title"
+          role="status"
+          aria-live="polite"
+        >
+          <p className="portal-eyebrow">LuvCoachAI Portal</p>
+          <h1 id="portal-access-title">Checking portal access…</h1>
+          <p>Please wait while we verify your staff access.</p>
+        </section>
       </div>
     );
   }
 
   if (blockedReason || !verifiedStaff) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div className="w-full max-w-lg rounded-2xl border bg-white p-6 shadow-sm">
-          <h1 className="text-lg font-semibold">Portal access blocked</h1>
-          <p className="mt-2 text-sm text-slate-700">
+      <div className="portal-access-screen">
+        <section
+          className="portal-access-card"
+          aria-labelledby="portal-access-title"
+        >
+          <p className="portal-eyebrow">LuvCoachAI Portal</p>
+          <h1 id="portal-access-title">Portal access blocked</h1>
+          <p role="alert">
             {blockedReason ?? "This account does not have portal access."}
           </p>
           <button
             type="button"
-            className="mt-5 rounded-full bg-slate-900 px-5 py-2 text-sm text-white"
+            className="portal-primary-button"
             onClick={() => router.replace("/login")}
           >
             Go to login
           </button>
-        </div>
+        </section>
       </div>
     );
   }
 
   return (
-    <>
-      <TopNav
-        role={verifiedStaff.role}
-        firstName={verifiedStaff.firstName}
-        email={verifiedStaff.email}
-      />
-      {children}
-    </>
+    <div className="portal-shell" data-portal-path={pathname}>
+      <a className="portal-skip-link" href="#portal-content">
+        Skip to page content
+      </a>
+
+      {/* TopNav still owns its links, role visibility and logout handler. */}
+      <div className="portal-topbar">
+        <TopNav
+          role={verifiedStaff.role}
+          firstName={verifiedStaff.firstName}
+          email={verifiedStaff.email}
+        />
+      </div>
+
+      {/*
+        One shared width constraint for protected portal pages.
+        Keep this a div: existing pages may already supply a main landmark.
+        No clipping/overflow rule here, so dialogs and menus are not hidden.
+      */}
+      <div id="portal-content" className="portal-content" tabIndex={-1}>
+        {children}
+      </div>
+    </div>
   );
 }

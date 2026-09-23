@@ -1,582 +1,1104 @@
 "use client";
-
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
-import { Panel } from "@/components/Panel";
-import { PageShell } from "@/components/ui/PageShell";
-import { supabaseBrowser } from "@/lib/supabaseBrowser";
-
-type StaffRole = "staff" | "csr" | "henry" | "admin";
-type StaffStatus = "active" | "inactive";
-
-type StaffPermissions = {
-  user_search?: boolean;
-  onboarding?: boolean;
-  photo_review?: boolean;
-  library_review?: boolean;
-  jobs?: boolean;
-  henry_desk?: boolean;
-  safety?: boolean;
-  system?: boolean;
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { PortalIcon } from "@/components/portal/PortalIcon";
+import { staffRequest, errorMessage } from "@/lib/staffAccessClient";
+import { assignableRoles, editableWork, initials, isAdminRole, permissionChanges, roleLabel, savedWorkLabels, staffIsActive, staffName, workOptions, type StaffAccessResponse, type StaffApplication, type StaffRecord, type WorkKey, } from "@/lib/staffAccessModel";
+import styles from "@/components/staff/staff.module.css";
+type Editor = {
+    id: string;
+    email: string;
+    first_name: string;
+    last_name: string;
+    role: string;
+    status: "keep" | "active" | "inactive";
+    work: Record<WorkKey, boolean>;
 };
-
-type StaffRow = {
-  id: string;
-  email: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  role: StaffRole | string | null;
-  status: StaffStatus | string | null;
-  permissions: StaffPermissions | null;
-  auth_user_id?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
-
-type StaffApplication = {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string;
-  phone: string | null;
-  request_role: string | null;
-  why_joining: string | null;
-  experience: string | null;
-  values_alignment: string | null;
-  status: string | null;
-  created_at: string;
-};
-
-type ApiPayload = {
-  staff?: StaffRow[];
-  applications?: StaffApplication[];
-  error?: string;
-};
-
-const roleOptions: { value: StaffRole; label: string; help: string }[] = [
-  { value: "staff", label: "Staff", help: "Basic portal staff access" },
-  { value: "csr", label: "CSR", help: "User support and onboarding" },
-  { value: "henry", label: "Henry", help: "Henry desk / guided support" },
-  { value: "admin", label: "Admin", help: "Admin tools and staff access" },
-];
-
-const permissionOptions: { key: keyof StaffPermissions; label: string }[] = [
-  { key: "user_search", label: "User Search" },
-  { key: "onboarding", label: "Onboarding" },
-  { key: "photo_review", label: "Photo Review" },
-  { key: "library_review", label: "Library Review" },
-  { key: "jobs", label: "Jobs" },
-  { key: "henry_desk", label: "Henry Desk" },
-  { key: "safety", label: "Safety" },
-  { key: "system", label: "System" },
-];
-
-const defaultPermissions: Record<StaffRole, StaffPermissions> = {
-  staff: { user_search: true },
-  csr: { user_search: true, onboarding: true, jobs: true },
-  henry: { user_search: true, henry_desk: true, jobs: true },
-  admin: {
-    user_search: true,
-    onboarding: true,
-    photo_review: true,
-    library_review: true,
-    jobs: true,
-    henry_desk: true,
-    safety: true,
-    system: true,
-  },
-};
-
-const blankForm = {
-  id: "",
-  email: "",
-  first_name: "",
-  last_name: "",
-  role: "staff" as StaffRole,
-  status: "active" as StaffStatus,
-  permissions: defaultPermissions.staff,
-};
-
+function newEditor(): Editor {
+    return {
+        id: "", email: "", first_name: "", last_name: "", role: "staff", status: "active",
+        work: editableWork({ user_search: true }),
+    };
+}
+function editRecord(row: StaffRecord): Editor {
+    return {
+        id: row.id, email: row.email ?? "", first_name: row.first_name ?? "", last_name: row.last_name ?? "",
+        role: "__keep__", status: "keep", work: editableWork(row.permissions),
+    };
+}
 export default function StaffAccessPage() {
-  const [staff, setStaff] = useState<StaffRow[]>([]);
-  const [applications, setApplications] = useState<StaffApplication[]>([]);
-  const [form, setForm] = useState(blankForm);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [busyApplicationId, setBusyApplicationId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  async function getToken() {
-    const { data } = await supabaseBrowser.auth.getSession();
-    return data.session?.access_token || null;
-  }
-
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("Not logged in.");
-
-      const res = await fetch("/api/staff/access", {
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json: ApiPayload = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to load staff access.");
-
-      setStaff(json.staff || []);
-      setApplications(json.applications || []);
-    } catch (e: any) {
-      setError(e?.message || "Failed to load staff access.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  const activeStaff = useMemo(
-    () => staff.filter((s) => (s.status || "").toLowerCase() === "active"),
-    [staff]
-  );
-
-  const inactiveStaff = useMemo(
-    () => staff.filter((s) => (s.status || "").toLowerCase() !== "active"),
-    [staff]
-  );
-
-  const pendingApplications = useMemo(() => {
-    return applications.filter((a) => {
-      const status = (a.status || "").toLowerCase();
-      return status === "" || status === "submitted" || status === "pending";
+    const [overview, setOverview] = useState<StaffAccessResponse | null>(null);
+    const [form, setForm] = useState<Editor>(newEditor);
+    const [baseline, setBaseline] = useState<StaffRecord | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [busy, setBusy] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
+    const [filter, setFilter] = useState("");
+    const [view, setView] = useState<"all" | "active" | "inactive">("all");
+    const editorHeading = useRef<HTMLHeadingElement>(null);
+    const [approvalRoles, setApprovalRoles] = useState<Record<string, string>>({});
+    const cleanForm = baseline ? editRecord(baseline) : newEditor();
+    const dirty = JSON.stringify(form) !== JSON.stringify(cleanForm);
+    const disabled = loading || busy !== null || overview === null;
+    const effectiveRole = form.role === "__keep__" ? baseline?.role ?? "" : form.role;
+    const protectedAccount = !!baseline && (isAdminRole(baseline.role) || baseline.id === overview?.meId);
+    const activeRows = overview?.staff.filter(staffIsActive) ?? [];
+    const inactiveRows = overview?.staff.filter((row) => !staffIsActive(row)) ?? [];
+    const visibleRows = (overview?.staff ?? []).filter((row) => {
+        const matchesStatus = view === "all" || (view === "active" ? staffIsActive(row) : !staffIsActive(row));
+        return matchesStatus && `${staffName(row)} ${row.email ?? ""} ${roleLabel(row.role)}`.toLowerCase().includes(filter.trim().toLowerCase());
     });
-  }, [applications]);
-
-  function startEdit(row: StaffRow) {
-    setNotice(null);
-    setError(null);
-    setForm({
-      id: row.id,
-      email: row.email || "",
-      first_name: row.first_name || "",
-      last_name: row.last_name || "",
-      role: normalizeRole(row.role),
-      status: normalizeStatus(row.status),
-      permissions: row.permissions || {},
-    });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function startFromApplication(app: StaffApplication) {
-    const role = normalizeRole(app.request_role || "staff");
-    setNotice(null);
-    setError(null);
-    setForm({
-      id: "",
-      email: app.email || "",
-      first_name: app.first_name || "",
-      last_name: app.last_name || "",
-      role,
-      status: "active",
-      permissions: defaultPermissions[role],
-    });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function updateRole(role: StaffRole) {
-    setForm((current) => ({
-      ...current,
-      role,
-      permissions: { ...defaultPermissions[role], ...current.permissions },
-    }));
-  }
-
-  function togglePermission(key: keyof StaffPermissions) {
-    setForm((current) => ({
-      ...current,
-      permissions: {
-        ...current.permissions,
-        [key]: !current.permissions?.[key],
-      },
-    }));
-  }
-
-  async function saveStaff() {
-    setSaving(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("Not logged in.");
-
-      const res = await fetch("/api/staff/access", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(form),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to save staff access.");
-
-      setNotice("Staff access saved.");
-      setForm(blankForm);
-      await load();
-    } catch (e: any) {
-      setError(e?.message || "Failed to save staff access.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function decideApplication(
-    applicationId: string,
-    action: "approve" | "reject",
-    role?: StaffRole
-  ) {
-    setBusyApplicationId(applicationId);
-    setError(null);
-    setNotice(null);
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("Not logged in.");
-
-      const res = await fetch("/api/staff/applications/decision", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ application_id: applicationId, action, role }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Application action failed.");
-
-      setNotice(action === "approve" ? "Application approved and staff access created." : "Application rejected.");
-      await load();
-    } catch (e: any) {
-      setError(e?.message || "Application action failed.");
-    } finally {
-      setBusyApplicationId(null);
-    }
-  }
-
-  return (
-    <PageShell
-      label="Admin"
-      emoji="🛡️"
-      title="Staff Access"
-      subtitle="Add portal staff, assign their role, and approve applications from one place."
-      wide
-    >
-      <div className="max-w-[1100px] mx-auto space-y-5">
-        {(error || notice) && (
-          <div
-            className={
-              error
-                ? "rounded-xl bg-[#FEE2E2] text-[#9B2C2C] text-sm px-3 py-2"
-                : "rounded-xl bg-emerald-50 text-emerald-800 text-sm px-3 py-2 border border-emerald-100"
+    const load = useCallback(async (): Promise<StaffAccessResponse | null> => {
+        setLoading(true);
+        setError(null);
+        try {
+            const data = await staffRequest<StaffAccessResponse>("/api/staff/access");
+            if (!Array.isArray(data.staff) || !Array.isArray(data.applications))
+                throw new Error("The server returned an unexpected staff response.");
+            setOverview(data);
+            return data;
+        }
+        catch (failure) {
+            setError(errorMessage(failure));
+            setOverview(null);
+            return null;
+        }
+        finally {
+            setLoading(false);
+        }
+    }, []);
+    useEffect(() => {
+        let active = true;
+        void load().then((data) => {
+            if (!active || !data)
+                return;
+            const target = new URLSearchParams(window.location.search).get("staff");
+            const row = target ? data.staff.find((item) => item.id === target) : null;
+            if (row) {
+                setBaseline(row);
+                setForm(editRecord(row));
             }
-          >
-            {error || notice}
-          </div>
-        )}
-
-        <Panel>
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Add or update staff</h2>
-              <p className="text-sm text-slate-500">
-                Use this for people who should have portal access even if they never submitted an application.
-              </p>
-            </div>
-            {form.id && (
-              <button
-                type="button"
-                className="text-sm text-slate-600 underline mt-2 sm:mt-0"
-                onClick={() => setForm(blankForm)}
-              >
-                Clear edit
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Field label="Email" required>
-              <input
-                className="lc-input w-full"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="name@example.com"
-              />
-            </Field>
-            <Field label="Primary role" required>
-              <select
-                className="lc-input w-full"
-                value={form.role}
-                onChange={(e) => updateRole(e.target.value as StaffRole)}
-              >
-                {roleOptions.map((role) => (
-                  <option key={role.value} value={role.value}>
-                    {role.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="First name">
-              <input
-                className="lc-input w-full"
-                value={form.first_name}
-                onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                placeholder="First name"
-              />
-            </Field>
-            <Field label="Last name">
-              <input
-                className="lc-input w-full"
-                value={form.last_name}
-                onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                placeholder="Last name"
-              />
-            </Field>
-            <Field label="Status">
-              <select
-                className="lc-input w-full"
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as StaffStatus })}
-              >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </Field>
-          </div>
-
-          <div className="mt-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500 mb-2">Work permissions</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {permissionOptions.map((permission) => (
-                <label
-                  key={permission.key}
-                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={!!form.permissions?.[permission.key]}
-                    onChange={() => togglePermission(permission.key)}
-                  />
-                  {permission.label}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex justify-end mt-5">
-            <button
-              type="button"
-              className="lc-button rounded-full px-5 py-2 disabled:opacity-70"
-              disabled={saving}
-              onClick={saveStaff}
+            else if (target)
+                setError("That staff member was not in the returned list. Use the staff search below.");
+        });
+        return () => {
+            active = false;
+        };
+    }, [load]);
+    useEffect(() => {
+        if (!dirty)
+            return;
+        const warn = (event: BeforeUnloadEvent) => {
+            event.preventDefault();
+            event.returnValue = "";
+        };
+        window.addEventListener("beforeunload", warn);
+        return () => window.removeEventListener("beforeunload", warn);
+    }, [dirty]);
+    function mayDiscard() {
+        return !dirty || window.confirm("Discard the unsaved staff details and work settings?");
+    }
+    function chooseStaff(row: StaffRecord | null) {
+        if (disabled || !mayDiscard())
+            return;
+        setError(null);
+        setNotice(null);
+        setBaseline(row);
+        setForm(row ? editRecord(row) : newEditor());
+        requestAnimationFrame(() => {
+            editorHeading.current?.focus();
+            editorHeading.current?.scrollIntoView({ block: "start", behavior: "auto" });
+        });
+    }
+    async function refresh() {
+        if (busy || !mayDiscard())
+            return;
+        const selectedId = baseline?.id;
+        const data = await load();
+        if (!data)
+            return;
+        const row = data.staff.find((item) => item.id === selectedId) ?? null;
+        setBaseline(row);
+        setForm(row ? editRecord(row) : newEditor());
+    }
+    async function saveStaff(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (disabled)
+            return;
+        if (!baseline && !window.confirm(`Add ${form.email.trim()} as ${roleLabel(form.role)}? If a login is missing, this will send a login invitation.`))
+            return;
+        if (baseline && form.status === "inactive" && !window.confirm(`Deactivate portal access for ${staffName(baseline)}? This does not delete their account or content.`))
+            return;
+        if (baseline && !isAdminRole(baseline.role) && isAdminRole(effectiveRole) && !window.confirm(`Give ${staffName(baseline)} administrator access, including staff management?`))
+            return;
+        setBusy("save");
+        setError(null);
+        setNotice(null);
+        try {
+            const result = await staffRequest<{
+                staff: StaffRecord;
+                invitationSent?: boolean;
+            }>("/api/staff/access", {
+                editor_version: "staff-access-v2",
+                id: form.id,
+                revision: baseline?.revision,
+                email: form.email,
+                first_name: form.first_name,
+                last_name: form.last_name,
+                role: form.role,
+                status: form.status,
+                permission_changes: baseline ? permissionChanges(baseline.permissions, form.work) : form.work,
+                confirm_invitation: !baseline,
+            });
+            if (!result.staff?.revision)
+                throw new Error("The save response was incomplete. Refresh before trying again.");
+            setBaseline(result.staff);
+            setForm(editRecord(result.staff));
+            setOverview((old) => old ? {
+                ...old,
+                staff: old.staff.some((row) => row.id === result.staff.id)
+                    ? old.staff.map((row) => row.id === result.staff.id ? result.staff : row)
+                    : [result.staff, ...old.staff],
+            } : old);
+            setNotice(result.invitationSent ? "Staff saved and a login invitation was sent. Coaching authoring can now be set below." : "Staff details and work settings saved. Coaching authoring is managed separately below.");
+        }
+        catch (failure) {
+            setError(errorMessage(failure));
+        }
+        finally {
+            setBusy(null);
+        }
+    }
+    async function changeAuthorAccess() {
+        if (!baseline || disabled || dirty || isAdminRole(baseline.role))
+            return;
+        const next = baseline.permissions?.coaching_author !== true;
+        if (!window.confirm(`${next ? "Enable" : "Disable"} coaching authoring for ${staffName(baseline)}? This changes their module and workbook editing access immediately.`))
+            return;
+        setBusy("author");
+        setError(null);
+        setNotice(null);
+        try {
+            // Reuse the protected coaching command and its expected_author check.
+            // Staff details never write or normalize coaching_author/coaching_review.
+            await staffRequest("/api/coaching", {
+                action: "set_author", id: baseline.id,
+                author: next, expected_author: baseline.permissions?.coaching_author === true,
+            });
+            const refreshed = await staffRequest<StaffAccessResponse>("/api/staff/access");
+            const row = refreshed.staff.find((item) => item.id === baseline.id);
+            if (!row)
+                throw new Error("The authoring change completed, but the staff record could not be refreshed. Refresh before making another change.");
+            setOverview(refreshed);
+            setBaseline(row);
+            setForm(editRecord(row));
+            setNotice(`Coaching authoring ${next ? "enabled" : "disabled"}. No Journal access was added.`);
+        }
+        catch (failure) {
+            setError(errorMessage(failure));
+        }
+        finally {
+            setBusy(null);
+        }
+    }
+    async function decideApplication(app: StaffApplication, action: "approve" | "reject") {
+        if (disabled || dirty)
+            return;
+        const chosenRole = approvalRoles[app.id] ?? "staff";
+        const message = action === "approve"
+            ? `Approve ${app.email} as ${roleLabel(chosenRole)}? This uses the existing application approval process and may send a login invitation.`
+            : `Reject the application from ${app.email}?`;
+        if (!window.confirm(message))
+            return;
+        setBusy(app.id);
+        setError(null);
+        setNotice(null);
+        try {
+            // Keep the existing application decision endpoint and payload contract.
+            await staffRequest("/api/staff/applications/decision", {
+                application_id: app.id, action, ...(action === "approve" ? { role: chosenRole } : {}),
+            });
+            const data = await load();
+            if (data)
+                setNotice(action === "approve" ? "Application approved. Find the person in the staff list to review their work settings and coaching access." : "Application rejected.");
+        }
+        catch (failure) {
+            setError(errorMessage(failure));
+        }
+        finally {
+            setBusy(null);
+        }
+    }
+    return (
+        <div
+            className={styles.page}
+        >
+            <header
+                className={styles.pageHeader}
             >
-              {saving ? "Saving…" : form.id ? "Update staff" : "Add staff"}
-            </button>
-          </div>
-        </Panel>
-
-        <Panel>
-          <div className="flex items-start justify-between mb-4">
+                <div
+                    className={styles.headingGroup}
+                >
+                    <span
+                        className={styles.headingIcon}
+                    >
+                        <PortalIcon
+                            name="lock"
+                        />
+                    </span>
+                    <div>
+                        <p
+                            className={styles.eyebrow}
+                        >
+                            Administration
+                        </p>
+                        <h1>
+                            Staff Access
+                        </h1>
+                        <p>
+                            Give each person a clear place to work.
+                        </p>
+                    </div>
+                </div>
+                <div
+                    className={styles.actions}
+                >
+                    <Link
+                        href="/staff"
+                        className={styles.button}
+                    >
+                        <PortalIcon
+                            name="people"
+                        />
+                        Staff List
+                    </Link>
+                    <button
+                        type="button"
+                        className={styles.button}
+                        disabled={loading || !!busy}
+                        onClick={() => void refresh()}
+                    >
+                        <PortalIcon
+                            name="refresh"
+                        />
+                        {loading ? "Loading…" : "Refresh"}
+                    </button>
+                </div>
+            </header>
+            {error && <div
+                role="alert"
+                className={styles.error}
+            >
+                <PortalIcon
+                    name="info"
+                />
+                <span>
+                    {error}
+                </span>
+            </div>}
+            {notice && <div
+                role="status"
+                className={styles.success}
+            >
+                <PortalIcon
+                    name="check"
+                />
+                <span>
+                    {notice}
+                </span>
+            </div>}
+            <div
+                className={styles.summaryGrid}
+                aria-label="Returned staff totals"
+            >
+                <Summary
+                    label="Active staff"
+                    value={overview ? activeRows.length : "—"}
+                    icon="people"
+                />
+                <Summary
+                    label="Inactive staff"
+                    value={overview ? inactiveRows.length : "—"}
+                    icon="lock"
+                />
+                <Summary
+                    label="Pending applications"
+                    value={overview && !overview.applicationWarning ? overview.applications.length : "—"}
+                    icon="clipboard"
+                />
+            </div>
+            <section
+                id="staff-editor"
+                className={styles.panel}
+                aria-labelledby="staff-editor-title"
+                aria-busy={busy === "save"}
+            >
+                <div
+                    className={styles.panelHeading}
+                >
+                    <div>
+                        <h2
+                            id="staff-editor-title"
+                            ref={editorHeading}
+                            tabIndex={-1}
+                        >
+                            <PortalIcon
+                                name="person"
+                            />
+                            {baseline ? `Manage ${staffName(baseline)}` : "Add a staff member"}
+                        </h2>
+                        <p>
+                            {baseline ? "Review their details and choose the work settings to change." : "Add an existing login or send an invitation when a login is needed."}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        className={styles.button}
+                        onClick={() => chooseStaff(null)}
+                        disabled={disabled}
+                    >
+                        New staff / clear
+                    </button>
+                </div>
+                <form
+                    onSubmit={saveStaff}
+                >
+                    <fieldset
+                        className={styles.formFields}
+                        disabled={disabled}
+                    >
+                        <legend
+                            className={styles.srOnly}
+                        >
+                            Staff details
+                        </legend>
+                        <div
+                            className={styles.fieldGrid}
+                        >
+                            <label
+                                className={styles.field}
+                            >
+                                <span>
+                                    Email
+                                </span>
+                                <input
+                                    type="email"
+                                    value={form.email}
+                                    required={!baseline}
+                                    readOnly={!!baseline}
+                                    autoComplete="off"
+                                    onChange={(event) => setForm({ ...form, email: event.target.value })}
+                                    placeholder="name@example.com"
+                                />
+                                <small>
+                                    {baseline ? "Existing login identity is kept unchanged." : "An invitation can be sent when you save."}
+                                </small>
+                            </label>
+                            <label
+                                className={styles.field}
+                            >
+                                <span>
+                                    Primary role
+                                </span>
+                                <select
+                                    value={form.role}
+                                    disabled={protectedAccount}
+                                    onChange={(event) => setForm({ ...form, role: event.target.value })}
+                                >
+                                    {baseline && <option
+                                        value="__keep__"
+                                    >
+                                        Keep current ·{" "}
+                                        {roleLabel(baseline.role)}
+                                    </option>}
+                                    {assignableRoles.map((role) => <option
+                                        key={role.value}
+                                        value={role.value}
+                                    >
+                                        {role.label}
+                                    </option>)}
+                                </select>
+                                <small>
+                                    Changing the role does not select extra work flags automatically.
+                                </small>
+                            </label>
+                            <label
+                                className={styles.field}
+                            >
+                                <span>
+                                    First name
+                                </span>
+                                <input
+                                    value={form.first_name}
+                                    maxLength={150}
+                                    onChange={(event) => setForm({ ...form, first_name: event.target.value })}
+                                    autoComplete="off"
+                                />
+                            </label>
+                            <label
+                                className={styles.field}
+                            >
+                                <span>
+                                    Last name
+                                </span>
+                                <input
+                                    value={form.last_name}
+                                    maxLength={150}
+                                    onChange={(event) => setForm({ ...form, last_name: event.target.value })}
+                                    autoComplete="off"
+                                />
+                            </label>
+                            <label
+                                className={styles.field}
+                            >
+                                <span>
+                                    Portal account status
+                                </span>
+                                <select
+                                    value={form.status}
+                                    disabled={protectedAccount}
+                                    onChange={(event) => setForm({ ...form, status: event.target.value as Editor["status"] })}
+                                >
+                                    {baseline && <option
+                                        value="keep"
+                                    >
+                                        Keep current ·{" "}
+                                        {staffIsActive(baseline) ? "Active" : "Inactive"}
+                                    </option>}
+                                    <option
+                                        value="active"
+                                    >
+                                        Active
+                                    </option>
+                                    <option
+                                        value="inactive"
+                                    >
+                                        Inactive
+                                    </option>
+                                </select>
+                                <small>
+                                    Inactive preserves the record; it does not delete the login or content.
+                                </small>
+                            </label>
+                            <div
+                                className={styles.field}
+                            >
+                                <span>
+                                    Login connection
+                                </span>
+                                <p
+                                    className={styles.inlineInfo}
+                                >
+                                    <PortalIcon
+                                        name="lock"
+                                    />
+                                    {baseline ? baseline.auth_user_id ? "Linked to a login" : "No auth_user_id link recorded" : "Checked when staff is added"}
+                                </p>
+                            </div>
+                        </div>
+                    </fieldset>
+                    {protectedAccount && <p
+                        className={styles.hint}
+                    >
+                        Your own account and existing administrators cannot be deactivated or have their role changed here.
+                    </p>}
+                    <div
+                        className={styles.workHeader}
+                    >
+                        <h3>
+                            Saved work settings
+                        </h3>
+                        <p>
+                            Choose the work flags to save for this person.
+                        </p>
+                    </div>
+                    <p
+                        className={styles.caution}
+                    >
+                        <PortalIcon
+                            name="shield"
+                        />
+                        <span>
+                            These settings are not a new portal-wide security boundary. Older pages still use their current access rules; changing a checkbox does not by itself prove that a direct page or data request is blocked.
+                        </span>
+                    </p>
+                    <div
+                        className={styles.permissionGroups}
+                    >
+                        <fieldset
+                            className={styles.permissionGroup}
+                            disabled={disabled || isAdminRole(effectiveRole)}
+                        >
+                            <legend>
+                                Member support
+                            </legend>
+                            {workOptions.filter((option) => option.group === "support").map((option) => (<label
+                                key={option.key}
+                                className={styles.permissionCard}
+                                data-checked={form.work[option.key]}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={form.work[option.key]}
+                                    onChange={(event) => setForm({ ...form, work: { ...form.work, [option.key]: event.target.checked } })}
+                                />
+                                <PortalIcon
+                                    name={option.icon}
+                                />
+                                <span>
+                                    <strong>
+                                        {option.label}
+                                    </strong>
+                                    <small>
+                                        {option.description}
+                                    </small>
+                                </span>
+                            </label>))}
+                        </fieldset>
+                        <fieldset
+                            className={styles.permissionGroup}
+                            disabled={disabled || isAdminRole(effectiveRole)}
+                        >
+                            <legend>
+                                Teaching material
+                            </legend>
+                            {workOptions.filter((option) => option.group === "content").map((option) => (<label
+                                key={option.key}
+                                className={styles.permissionCard}
+                                data-checked={form.work[option.key]}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={form.work[option.key]}
+                                    onChange={(event) => setForm({ ...form, work: { ...form.work, [option.key]: event.target.checked } })}
+                                />
+                                <PortalIcon
+                                    name={option.icon}
+                                />
+                                <span>
+                                    <strong>
+                                        {option.label}
+                                    </strong>
+                                    <small>
+                                        {option.description}
+                                    </small>
+                                </span>
+                            </label>))}
+                            <div
+                                className={styles.informationCard}
+                            >
+                                <PortalIcon
+                                    name="calendar"
+                                />
+                                <div>
+                                    <strong>
+                                        Session Talks
+                                    </strong>
+                                    <span
+                                        className={styles.neutralBadge}
+                                    >
+                                        Existing staff rules
+                                    </span>
+                                    <p>
+                                        This tool still uses its existing staff-access rules. A separate per-person permission needs to be connected.
+                                    </p>
+                                    <Link
+                                        href="/session-talks"
+                                    >
+                                        Open Session Talks
+                                        <span
+                                            aria-hidden="true"
+                                        >
+                                            →
+                                        </span>
+                                    </Link>
+                                </div>
+                            </div>
+                            <div
+                                className={styles.informationCard}
+                            >
+                                <PortalIcon
+                                    name="clipboard"
+                                />
+                                <div>
+                                    <strong>
+                                        Hidden and future tools
+                                    </strong>
+                                    <p>
+                                        Onboarding, Jobs, and System are not offered here. Their existing settings, coaching review, and any other stored keys are preserved.
+                                    </p>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                    {isAdminRole(effectiveRole) && <p
+                        className={styles.hint}
+                    >
+                        Administrator access is role-based in the existing protected admin tools. The saved flags above are not an administrator restriction.
+                    </p>}
+                    <div
+                        className={styles.saveBar}
+                    >
+                        <span
+                            className={styles.hint}
+                        >
+                            {dirty ? "Unsaved details or work settings" : baseline ? "No unsaved details" : "Coaching authoring is set after creating the staff record."}
+                        </span>
+                        <button
+                            type="submit"
+                            className={`${styles.button} ${styles.primary}`}
+                            disabled={disabled || (!!baseline && !dirty)}
+                        >
+                            <PortalIcon
+                                name="check"
+                            />
+                            {busy === "save" ? "Saving…" : baseline ? "Save staff details" : "Add staff"}
+                        </button>
+                    </div>
+                </form>
+            </section>
+            <section
+                className={`${styles.panel} ${styles.coachingPanel}`}
+                aria-labelledby="author-title"
+            >
+                <div
+                    className={styles.panelHeading}
+                >
+                    <div>
+                        <h2
+                            id="author-title"
+                        >
+                            <PortalIcon
+                                name="book"
+                            />
+                            Coaching authoring
+                        </h2>
+                        <p>
+                            Module and workbook editing. Uses the existing coaching permission and save command.
+                        </p>
+                    </div>
+                    <span
+                        className={styles.neutralBadge}
+                    >
+                        Saved separately
+                    </span>
+                </div>
+                {!baseline ? <p>
+                    Select or save a staff member first. Then enable their authoring access here.
+                </p> : (<>
+                    <div
+                        className={styles.coachingRow}
+                    >
+                        <div>
+                            <strong>
+                                {staffName(baseline)}
+                            </strong>
+                            <p>
+                                {isAdminRole(baseline.role) ? "Included through the administrator role." : baseline.permissions?.coaching_author === true ? "Author permission is enabled." : "Author permission is not enabled."}
+                            </p>
+                        </div>
+                        <span
+                            className={isAdminRole(baseline.role) || baseline.permissions?.coaching_author === true ? styles.goodBadge : styles.neutralBadge}
+                        >
+                            {isAdminRole(baseline.role) ? "Administrator" : baseline.permissions?.coaching_author === true ? "Enabled" : "Not enabled"}
+                        </span>
+                        {!isAdminRole(baseline.role) && <button
+                            type="button"
+                            className={`${styles.button} ${baseline.permissions?.coaching_author === true ? "" : styles.primary}`}
+                            disabled={disabled || dirty || (!staffIsActive(baseline) && baseline.permissions?.coaching_author !== true)}
+                            onClick={() => void changeAuthorAccess()}
+                        >
+                            {busy === "author" ? "Updating…" : baseline.permissions?.coaching_author === true ? "Disable authoring" : "Enable authoring"}
+                        </button>}
+                    </div>
+                    {dirty && <p
+                        className={styles.hint}
+                    >
+                        Save or discard staff-detail changes before changing authoring access.
+                    </p>}
+                    {!staffIsActive(baseline) && <p
+                        className={styles.hint}
+                    >
+                        The staff account is inactive. It cannot use coaching authoring until portal access is restored.
+                    </p>}
+                </>)}
+                <p
+                    className={styles.privacyNote}
+                >
+                    <PortalIcon
+                        name="lock"
+                    />
+                    <span>
+                        This authoring setting does not grant access to private Journals. Workbook-progress review is a separate, unfinished workflow.
+                    </span>
+                </p>
+            </section>
+            <section
+                className={styles.panel}
+                aria-labelledby="directory-title"
+            >
+                <div
+                    className={styles.panelHeading}
+                >
+                    <div>
+                        <h2
+                            id="directory-title"
+                        >
+                            <PortalIcon
+                                name="people"
+                            />
+                            Your staff
+                        </h2>
+                        <p>
+                            Choose Manage access to load a person into the editor.
+                        </p>
+                    </div>
+                    <label
+                        className={styles.searchField}
+                    >
+                        <span
+                            className={styles.srOnly}
+                        >
+                            Find staff
+                        </span>
+                        <PortalIcon
+                            name="search"
+                        />
+                        <input
+                            type="search"
+                            value={filter}
+                            onChange={(event) => setFilter(event.target.value)}
+                            placeholder="Find name, email, or role"
+                        />
+                    </label>
+                </div>
+                <div
+                    className={styles.filterRow}
+                    aria-label="Staff status filter"
+                >
+                    {(["all", "active", "inactive"] as const).map((status) => <button
+                        key={status}
+                        type="button"
+                        className={styles.filter}
+                        aria-pressed={view === status}
+                        onClick={() => setView(status)}
+                    >
+                        {status === "all" ? "All staff" : status === "active" ? "Active" : "Inactive"}
+                    </button>)}
+                </div>
+                {overview?.staffLimitReached && <p
+                    className={styles.hint}
+                >
+                    Showing the first 1,000 returned records; totals and filtering apply to this list.
+                </p>}
+                <div
+                    className={styles.tableScroll}
+                    role="region"
+                    aria-label="Staff directory"
+                    tabIndex={0}
+                >
+                    <table
+                        className={styles.table}
+                    >
+                        <thead>
+                            <tr>
+                                <th
+                                    scope="col"
+                                >
+                                    Person
+                                </th>
+                                <th
+                                    scope="col"
+                                >
+                                    Role / account
+                                </th>
+                                <th
+                                    scope="col"
+                                >
+                                    Saved settings
+                                </th>
+                                <th
+                                    scope="col"
+                                >
+                                    Action
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {visibleRows.map((row) => <tr
+                                key={row.id}
+                            >
+                                <td>
+                                    <div
+                                        className={styles.person}
+                                    >
+                                        <span
+                                            className={styles.avatar}
+                                            aria-hidden="true"
+                                        >
+                                            {initials(staffName(row))}
+                                        </span>
+                                        <div>
+                                            <strong>
+                                                {staffName(row)}
+                                            </strong>
+                                            <span>
+                                                {row.email || "No email recorded"}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <strong>
+                                        {roleLabel(row.role)}
+                                    </strong>
+                                    <div
+                                        className={styles.chips}
+                                    >
+                                        <span
+                                            className={staffIsActive(row) ? styles.goodBadge : styles.neutralBadge}
+                                        >
+                                            {staffIsActive(row) ? "Active" : "Inactive"}
+                                        </span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div
+                                        className={styles.chips}
+                                    >
+                                        {savedWorkLabels(row.permissions).map((label) => <span
+                                            className={styles.badge}
+                                            key={label}
+                                        >
+                                            {label}
+                                        </span>)}
+                                        {savedWorkLabels(row.permissions).length === 0 && <span>
+                                            No listed flags
+                                        </span>}
+                                    </div>
+                                </td>
+                                <td>
+                                    <button
+                                        type="button"
+                                        className={styles.button}
+                                        disabled={disabled}
+                                        onClick={() => chooseStaff(row)}
+                                    >
+                                        Manage access
+                                    </button>
+                                </td>
+                            </tr>)}
+                            {!visibleRows.length && <tr>
+                                <td
+                                    colSpan={4}
+                                >
+                                    {loading ? "Loading staff…" : overview ? "No staff match this view." : "Staff are unavailable until the request succeeds."}
+                                </td>
+                            </tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            <section
+                className={styles.panel}
+                aria-labelledby="applications-title"
+            >
+                <div
+                    className={styles.panelHeading}
+                >
+                    <div>
+                        <h2
+                            id="applications-title"
+                        >
+                            <PortalIcon
+                                name="clipboard"
+                            />
+                            Pending applications
+                        </h2>
+                        <p>
+                            Review the application before choosing a role. Requested roles are not granted automatically.
+                        </p>
+                    </div>
+                    <span
+                        className={styles.neutralBadge}
+                    >
+                        {overview?.applicationWarning ? "Unavailable" : overview ? overview.applications.length : "—"}
+                    </span>
+                </div>
+                {overview?.applicationWarning && <p
+                    className={styles.caution}
+                >
+                    {overview.applicationWarning}
+                </p>}
+                {overview?.applicationLimitReached && <p
+                    className={styles.hint}
+                >
+                    Showing the first 200 pending applications.
+                </p>}
+                {dirty && <p
+                    className={styles.hint}
+                >
+                    Finish the unsaved staff edit before approving or rejecting an application.
+                </p>}
+                {!loading && overview && !overview.applicationWarning && !overview.applications.length && <div
+                    className={styles.empty}
+                >
+                    <PortalIcon
+                        name="check"
+                    />
+                    <div>
+                        <strong>
+                            No pending applications
+                        </strong>
+                        <p>
+                            New applications will appear here when they are returned by the server.
+                        </p>
+                    </div>
+                </div>}
+                {overview?.applications.map((app) => <article
+                    className={styles.application}
+                    key={app.id}
+                >
+                    <div
+                        className={styles.panelHeading}
+                    >
+                        <div>
+                            <h3>
+                                {[app.first_name, app.last_name].filter(Boolean).join(" ") || "Applicant"}
+                            </h3>
+                            <p>
+                                {app.email}
+                            </p>
+                            <p>
+                                Requested role:{" "}
+                                {app.request_role || "Not specified"}
+                            </p>
+                        </div>
+                        <span
+                            className={styles.neutralBadge}
+                        >
+                            {app.status || "Pending"}
+                        </span>
+                    </div>
+                    <details>
+                        <summary>
+                            Read application details
+                        </summary>
+                        <div
+                            className={styles.applicationDetails}
+                        >
+                            <ApplicationDetail
+                                label="Why joining"
+                                value={app.why_joining}
+                            />
+                            <ApplicationDetail
+                                label="Experience"
+                                value={app.experience}
+                            />
+                            <ApplicationDetail
+                                label="Values alignment"
+                                value={app.values_alignment}
+                            />
+                        </div>
+                        <p
+                            className={styles.hint}
+                        >
+                            Submitted:{" "}
+                            {app.created_at ? new Date(app.created_at).toLocaleString() : "Not recorded"}
+                        </p>
+                    </details>
+                    <div
+                        className={styles.applicationActions}
+                    >
+                        <label
+                            className={styles.field}
+                        >
+                            <span>
+                                Approve as
+                            </span>
+                            <select
+                                disabled={disabled || dirty}
+                                value={approvalRoles[app.id] ?? "staff"}
+                                onChange={(event) => setApprovalRoles({ ...approvalRoles, [app.id]: event.target.value })}
+                            >
+                                <option
+                                    value="staff"
+                                >
+                                    Staff
+                                </option>
+                                <option
+                                    value="henry"
+                                >
+                                    Henry
+                                </option>
+                                <option
+                                    value="admin"
+                                >
+                                    Administrator
+                                </option>
+                            </select>
+                        </label>
+                        <button
+                            type="button"
+                            disabled={disabled || dirty}
+                            className={`${styles.button} ${styles.primary}`}
+                            onClick={() => void decideApplication(app, "approve")}
+                        >
+                            {busy === app.id ? "Working…" : "Approve application"}
+                        </button>
+                        <button
+                            type="button"
+                            disabled={disabled || dirty}
+                            className={styles.button}
+                            onClick={() => void decideApplication(app, "reject")}
+                        >
+                            Reject application
+                        </button>
+                    </div>
+                </article>)}
+            </section>
+        </div>
+    );
+}
+function Summary({ label, value, icon }: {
+    label: string;
+    value: number | string;
+    icon: "people" | "lock" | "clipboard";
+}) {
+    return (
+        <div
+            className={styles.summary}
+        >
+            <PortalIcon
+                name={icon}
+            />
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Pending applications</h2>
-              <p className="text-sm text-slate-500">
-                Includes submitted, pending, and older rows that still have a blank status.
-              </p>
+                <strong>
+                    {value}
+                </strong>
+                <span>
+                    {label}
+                </span>
             </div>
-            <button className="text-sm text-slate-600 underline" onClick={load} disabled={loading}>
-              Refresh
-            </button>
-          </div>
-
-          {loading ? (
-            <div className="text-sm text-slate-600">Loading…</div>
-          ) : pendingApplications.length === 0 ? (
-            <div className="text-sm text-slate-600">No pending applications.</div>
-          ) : (
-            <div className="space-y-3">
-              {pendingApplications.map((app) => {
-                const requestedRole = normalizeRole(app.request_role || "staff");
-                return (
-                  <div key={app.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <div className="text-base font-semibold text-slate-900">
-                          {fullName(app.first_name, app.last_name)}
-                        </div>
-                        <div className="text-sm text-slate-600">{app.email}</div>
-                        <div className="text-xs text-slate-500 mt-1">
-                          Requested role: <span className="font-medium">{requestedRole}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          className="lc-button px-4 py-2 rounded-full disabled:opacity-70"
-                          disabled={busyApplicationId === app.id}
-                          onClick={() => decideApplication(app.id, "approve", requestedRole)}
-                        >
-                          {busyApplicationId === app.id ? "Working…" : "Approve"}
-                        </button>
-                        <button
-                          className="px-4 py-2 rounded-full border border-slate-300 text-slate-800 hover:bg-slate-50 disabled:opacity-70"
-                          disabled={busyApplicationId === app.id}
-                          onClick={() => startFromApplication(app)}
-                        >
-                          Edit first
-                        </button>
-                        <button
-                          className="px-4 py-2 rounded-full border border-slate-300 text-slate-800 hover:bg-slate-50 disabled:opacity-70"
-                          disabled={busyApplicationId === app.id}
-                          onClick={() => decideApplication(app.id, "reject")}
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-                      <Info label="Why joining" value={app.why_joining} />
-                      <Info label="Experience" value={app.experience} />
-                      <Info label="Values alignment" value={app.values_alignment} />
-                    </div>
-
-                    <div className="text-[11px] text-slate-400 mt-3">
-                      Submitted: {app.created_at ? new Date(app.created_at).toLocaleString() : "—"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Panel>
-
-        <Panel>
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold text-slate-900">Active staff</h2>
-            <p className="text-sm text-slate-500">This is the portal access source of truth.</p>
-          </div>
-
-          {loading ? (
-            <div className="text-sm text-slate-600">Loading…</div>
-          ) : activeStaff.length === 0 ? (
-            <div className="text-sm text-slate-600">No active staff yet.</div>
-          ) : (
-            <StaffTable rows={activeStaff} onEdit={startEdit} />
-          )}
-        </Panel>
-
-        {inactiveStaff.length > 0 && (
-          <Panel>
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-slate-900">Inactive staff</h2>
-              <p className="text-sm text-slate-500">People who are saved but cannot access the portal.</p>
-            </div>
-            <StaffTable rows={inactiveStaff} onEdit={startEdit} />
-          </Panel>
-        )}
-      </div>
-    </PageShell>
-  );
+        </div>
+    );
+}
+function ApplicationDetail({ label, value }: {
+    label: string;
+    value: string | null;
+}) {
+    return (
+        <div
+            className={styles.detail}
+        >
+            <h4>
+                {label}
+            </h4>
+            <p>
+                {value?.trim() || "Not provided"}
+            </p>
+        </div>
+    );
 }
 
-function StaffTable({ rows, onEdit }: { rows: StaffRow[]; onEdit: (row: StaffRow) => void }) {
-  return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-          <tr>
-            <th className="px-4 py-3">Name</th>
-            <th className="px-4 py-3">Email</th>
-            <th className="px-4 py-3">Role</th>
-            <th className="px-4 py-3">Work permissions</th>
-            <th className="px-4 py-3">Login linked</th>
-            <th className="px-4 py-3 text-right">Action</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100 bg-white">
-          {rows.map((row) => (
-            <tr key={row.id}>
-              <td className="px-4 py-3 font-medium text-slate-900">
-                {fullName(row.first_name, row.last_name)}
-              </td>
-              <td className="px-4 py-3 text-slate-600">{row.email || "—"}</td>
-              <td className="px-4 py-3 text-slate-700 capitalize">{row.role || "staff"}</td>
-              <td className="px-4 py-3 text-slate-600">
-                <PermissionChips permissions={row.permissions || {}} />
-              </td>
-              <td className="px-4 py-3 text-slate-600">{row.auth_user_id ? "Yes" : "Not yet"}</td>
-              <td className="px-4 py-3 text-right">
-                <button className="text-sm text-blue-700 underline" onClick={() => onEdit(row)}>
-                  Edit
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function PermissionChips({ permissions }: { permissions: StaffPermissions }) {
-  const enabled = permissionOptions.filter((p) => permissions?.[p.key]).map((p) => p.label);
-  if (enabled.length === 0) return <span className="text-slate-400">—</span>;
-  return (
-    <div className="flex flex-wrap gap-1">
-      {enabled.map((label) => (
-        <span key={label} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">
-          {label}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function Field({ label, required, children }: { label: string; required?: boolean; children: ReactNode }) {
-  return (
-    <label className="block">
-      <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">
-        {label} {required && <span className="text-rose-500">*</span>}
-      </div>
-      {children}
-    </label>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-      <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="text-sm text-slate-800 mt-1 whitespace-pre-wrap">
-        {value?.trim() ? value : <span className="text-slate-400">—</span>}
-      </div>
-    </div>
-  );
-}
-
-function fullName(first?: string | null, last?: string | null) {
-  const name = `${first || ""} ${last || ""}`.trim();
-  return name || "Unnamed staff";
-}
-
-function normalizeRole(role?: string | null): StaffRole {
-  const value = (role || "staff").toLowerCase();
-  if (value === "admin" || value === "csr" || value === "henry" || value === "staff") return value;
-  return "staff";
-}
-
-function normalizeStatus(status?: string | null): StaffStatus {
-  return (status || "active").toLowerCase() === "inactive" ? "inactive" : "active";
-}

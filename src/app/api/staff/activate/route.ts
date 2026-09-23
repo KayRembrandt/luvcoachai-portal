@@ -138,6 +138,11 @@ const { error: staffErr } = await db.from("staff").upsert(
   },
   { onConflict: "id" }
 );
+console.log("=== STAFF ACTIVATE DEBUG ===");
+console.log("application_id:", application_id);
+console.log("app.email:", app.email);
+console.log("app.first_name:", app.first_name);
+console.log("app.last_name:", app.last_name);
 
 if (staffErr) return NextResponse.json({ error: staffErr.message }, { status: 400 });
 

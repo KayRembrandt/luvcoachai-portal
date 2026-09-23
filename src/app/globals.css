@@ -1,78 +1,658 @@
 @import "tailwindcss";
 
+/*
+ * LuvCoachAI / MiraLuna portal â€” Linen surface refinement, pass 2.
+ * Approved source: MiraLuna_Brand_Guidebook_comp v2 9_11_26.pdf.
+ * Linen surrounds Warm Cream surfaces, as requested by Ami.
+ * Keep these approved colors; do not substitute the alternate Cool Cream.
+ *
+ * Sections:
+ * 1. Brand tokens and font stacks
+ * 2. Tailwind theme and readable text sizes
+ * 3. Document defaults
+ * 4. Shared protected-page shell
+ * 5. Existing TopNav styling bridge
+ * 6. Legacy neutral surfaces and controls
+ * 7. Dashboard
+ * 8. Access states, focus and responsive behavior
+ *
+ * No new package, font download, database change or auth change is required.
+ */
+
+/* 1. Brand tokens and font stacks ---------------------------------------- */
+
 :root {
-  /* Base */
-  --background: #ffffff;
-  --foreground: #5c76bd;
+  --brand-twilight-blue: #333092;
+  --brand-ember-flame: #F58025;
+  --brand-evergreen-reserve: #2D6B52;
+  --brand-electric-indigo: #7473A9;
+  --brand-warm-cream: #fffaf6;
+  --brand-parchment: #fcf9ee;
+  --brand-linen: #feefe3;
+  --brand-midnight-violet: #0F004E;
+  --brand-charcoal: #162731;
+  --brand-slate: #4A4668;
 
-  /* Inputs */
-  --input-bg: #ffffff;
-  --input-text: #171717;
-  --input-placeholder: #92aee5; /* slate-500 */
-  --input-border: #d1d5db; /* gray-300 */
+  /*
+   * Use approved faces where they are installed/loaded. No font files or
+   * guessed file paths are supplied. Arial is the EXISTING portal fallback,
+   * not a claimed replacement for the licensed brand typefaces.
+   */
+  --portal-font-body: "Avenir Roman", "Avenir-Roman", "Avenir", Arial,
+    Helvetica, sans-serif;
+  --portal-font-label: "Avenir Black", "Avenir-Black", "Avenir",
+    Arial, Helvetica, sans-serif;
+  --portal-font-heading: "Mencken Standard Regular", "Mencken Standard",
+    var(--portal-font-body);
+  --portal-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
 
-  /* Panels / cards */
-  --panel-bg: #ffffff;
-  --panel-border: #e5e7eb;
+  /* 90rem = 1440px with the usual 16px root size; stays zoom-friendly. */
+  --portal-max-width: 90rem;
+  --portal-gutter: clamp(1rem, 2.5vw, 2rem);
+  --portal-radius: 1rem;
+  --portal-shadow: 0 0.25rem 0.9rem rgb(15 0 78 / 8%);
+
+  /* Keep names already used by the shared portal components.
+   * Neutral controls are cream; explicit primary/selected states stay blue. */
+  --background: var(--brand-linen);
+  --foreground: var(--brand-slate);
+  --input-bg: var(--brand-warm-cream);
+  --input-text: var(--brand-charcoal);
+  --input-placeholder: var(--brand-slate);
+  --input-border: var(--brand-electric-indigo);
+  --panel-bg: var(--brand-warm-cream);
+  --panel-border: var(--brand-electric-indigo);
+  --btn-bg: var(--brand-warm-cream);
+  --btn-text: var(--brand-twilight-blue);
+  --btn-border: var(--brand-electric-indigo);
 }
+
+/* 2. Tailwind theme and readable text sizes ------------------------------- */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-
   --color-input-bg: var(--input-bg);
   --color-input-text: var(--input-text);
   --color-input-placeholder: var(--input-placeholder);
   --color-input-border: var(--input-border);
-
   --color-panel-bg: var(--panel-bg);
   --color-panel-border: var(--panel-border);
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-portal-primary: var(--brand-twilight-blue);
+  --color-portal-accent: var(--brand-ember-flame);
+  --color-portal-success: var(--brand-evergreen-reserve);
+  --color-portal-cream: var(--brand-warm-cream);
+  --color-portal-parchment: var(--brand-parchment);
+  --color-portal-linen: var(--brand-linen);
+  --color-portal-text: var(--brand-slate);
+
+  --font-sans: var(--portal-font-body);
+  --font-serif: var(--portal-font-heading);
+  --font-mono: var(--portal-font-mono);
+
+  /*
+   * Existing text-xs/text-sm classes become 16px, not 12/14px.
+   * Change the scale centrally rather than adding page-by-page overrides.
+   * Explicit pixel sizes or CSS-module sizes still need their own review.
+   */
+  --text-xs: 1rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.5;
+  --text-base: 1.125rem;
+  --text-base--line-height: 1.65;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.4;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 1.35;
+  --text-2xl: 2rem;
+  --text-2xl--line-height: 1.2;
+  --text-3xl: 2.5rem;
+  --text-3xl--line-height: 1.15;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-  --background: #ffffff;
-  --foreground: #d1daf3;
+/* 3. Document defaults --------------------------------------------------- */
 
-  --panel-bg: #ffffff;
-  --panel-border: #e5e7eb;
+@layer base {
+  html {
+    font-size: 100%;
+    color-scheme: only light;
+  }
 
-  --input-bg: #ffffff;
-  --input-text: #111827;
-  --input-placeholder: #6b7280;
-  --input-border: #d1d5db;
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--portal-font-body);
+    font-size: 1.125rem;
+    line-height: 1.65;
+  }
 
-  --btn-bg: #515151;
-  --btn-text: #ffffff;
-  --btn-border: #0f172a;
-}
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #9eb8ec;
-    --foreground: #1e396e;
-
-    --panel-bg: #fbfcff;
-    --panel-border: #1f2937;
-
-    --input-bg: #0b1220;
-    --input-text: #cfddf8;
-    --input-placeholder: #94a3b8;
-    --input-border: #334155;
-
-    --btn-bg: #e5e7eb;
-    --btn-text: #0b1220;
-    --btn-border: #e5e7eb;
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--input-placeholder);
+    opacity: 1;
   }
 }
 
-}
-
-body {
+/*
+ * Deliberate single light palette: the previous nested dark-mode rules
+ * mixed blue page backgrounds, dark inputs and light panels. Remove those
+ * conflicting rules rather than layering another theme over them.
+ */
+.portal-body {
+  min-height: 100vh;
+  min-height: 100svh;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* 4. Shared protected-page shell ---------------------------------------- */
+
+.portal-shell {
+  min-height: 100vh;
+  min-height: 100svh;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.portal-content {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--portal-max-width);
+  min-width: 0;
+  margin-inline: auto;
+  padding: 2rem var(--portal-gutter) 4rem;
+}
+
+.portal-content > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 5. Existing TopNav styling bridge ------------------------------------- */
+
+/*
+ * TopNav receives a new logo and shared-brand label in this pass. Its
+ * role filtering, CoachingNavLink and logout logic remain intact. These selectors target
+ * its existing header/nav elements inside our new, explicit wrapper.
+ * Avoid generic rules that would also restyle tabs inside a page.
+ */
+/*
+ * Keep the existing multi-row navigation in document flow for this pass.
+ * At large text sizes, pinning all its rows can obscure the working area.
+ */
+.portal-topbar {
+  position: relative;
+  z-index: 50;
+  background: var(--brand-linen);
+}
+
+.portal-topbar > header {
+  position: static;
+  background: var(--brand-linen);
+  border-bottom: 1px solid var(--brand-electric-indigo);
+  backdrop-filter: none;
+}
+
+.portal-topbar > header > div {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--portal-max-width);
+  margin-inline: auto;
+  padding: 1.25rem var(--portal-gutter);
+}
+
+.portal-topbar header > div > div:first-child {
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.portal-topbar header > div > div:first-child > div {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.portal-topbar header img {
+  width: auto;
+  height: 3.5rem;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+/* Use the entire supplied logo in its original proportions. No cropping,
+ * recoloring, filters or added shadow. The new file is 600 by 529 pixels. */
+.portal-topbar header img.portal-company-logo {
+  width: 7.5rem;
+  max-width: 100%;
+  height: auto;
+  border-radius: 0;
+}
+
+.portal-topbar header > div > div:first-child > .portal-brand-identity {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.portal-brand-copy {
+  min-width: 0;
+}
+
+.portal-brand-context {
+  margin-block: 0.2rem;
+  color: var(--brand-slate);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.portal-topbar header > div > div:first-child > div:first-child > div > div:first-child {
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-label);
+  font-size: 1.25rem;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.portal-topbar nav {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.portal-topbar a,
+.portal-topbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--brand-electric-indigo);
+  border-radius: 0.6rem;
+  font-family: var(--portal-font-label);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow: none;
+}
+
+.portal-topbar a {
+  background: var(--brand-warm-cream);
+  color: var(--brand-twilight-blue);
+}
+
+.portal-topbar a:hover {
+  background: var(--brand-parchment);
+  border-color: var(--brand-twilight-blue);
+}
+
+.portal-topbar button,
+.portal-topbar a[aria-current="page"],
+.portal-shell[data-portal-path="/"] .portal-topbar a[href="/"] {
+  background: var(--brand-twilight-blue);
+  border-color: var(--brand-twilight-blue);
+  color: var(--brand-warm-cream);
+}
+
+.portal-topbar button:hover {
+  background: var(--brand-midnight-violet);
+  border-color: var(--brand-midnight-violet);
+}
+
+/* Role badges stay visible; these rules only recolor their existing style. */
+.portal-topbar .bg-blue-100 {
+  background: var(--brand-warm-cream);
+}
+
+.portal-topbar .text-blue-700 {
+  color: var(--brand-twilight-blue);
+}
+
+/* 6. Legacy neutral surfaces and controls ------------------------------- */
+
+/*
+ * Small, named compatibility bridge for neutral Tailwind styles already
+ * used by the portal. No blanket recoloring of all divs, SVGs or text.
+ * Red/amber/green status styles and CSS-module palettes are not overridden.
+ */
+.portal-shell :where(.bg-white, .bg-slate-50, .bg-slate-100) {
+  background-color: var(--brand-warm-cream);
+}
+
+.portal-shell :where(.border-slate-200, .border-gray-200) {
+  border-color: var(--brand-linen);
+}
+
+.portal-shell :where(.text-slate-500, .text-slate-600, .text-slate-700) {
+  color: var(--brand-slate);
+}
+
+.portal-shell :where(.text-slate-800, .text-slate-900) {
+  color: var(--brand-charcoal);
+}
+
+.portal-content :where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]),
+  select,
+  textarea
+) {
+  min-height: 2.75rem;
+  font-size: max(1.125rem, 1em);
+  line-height: 1.5;
+}
+
+.portal-content :where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--brand-twilight-blue);
+}
+
+.portal-content :where(button, [role="button"]) {
+  min-height: 2.75rem;
+  font-size: max(1rem, 1em);
+  line-height: 1.4;
+}
+
+/* 7. Dashboard ---------------------------------------------------------- */
+
+.portal-dashboard {
+  display: grid;
+  gap: 2rem;
+  min-width: 0;
+}
+
+.portal-dashboard-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 1fr);
+  gap: clamp(1.25rem, 3vw, 3rem);
+  align-items: stretch;
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  background: var(--brand-warm-cream);
+  border: 1px solid var(--brand-electric-indigo);
+  border-radius: var(--portal-radius);
+  box-shadow: var(--portal-shadow);
+}
+
+.portal-dashboard-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  padding: 0;
+}
+
+.portal-eyebrow {
+  margin: 0 0 0.75rem;
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-label);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.portal-dashboard h1 {
+  max-width: 18ch;
+  margin: 0;
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-heading);
+  font-size: clamp(2rem, 1.25rem + 2vw, 3rem);
+  font-weight: 400;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+
+/* One small Ember Flame accent, rather than repeated orange controls. */
+.portal-brand-rule {
+  display: block;
+  width: 3.5rem;
+  height: 0.2rem;
+  margin-block: 1.5rem;
+  background: var(--brand-ember-flame);
+}
+
+.portal-dashboard-lead {
+  max-width: 48ch;
+  margin: 0;
+  color: var(--brand-slate);
+  font-size: 1.25rem;
+  line-height: 1.65;
+}
+
+.portal-welcome-note {
+  min-width: 0;
+  padding: 1.75rem;
+  background: var(--brand-parchment);
+  border: 1px solid var(--brand-electric-indigo);
+  border-radius: var(--portal-radius);
+}
+
+
+.portal-dashboard h2,
+.portal-dashboard h3 {
+  margin: 0;
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-label);
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  line-height: 1.35;
+}
+
+.portal-dashboard h2 {
+  font-size: 1.5rem;
+}
+
+.portal-dashboard h3 {
+  font-size: 1.375rem;
+}
+
+.portal-welcome-note p {
+  margin: 0.75rem 0 0;
+  color: var(--brand-slate);
+  font-size: 1.125rem;
+  line-height: 1.65;
+}
+
+.portal-section-heading {
+  margin-bottom: 1.25rem;
+}
+
+.portal-section-heading p {
+  margin: 0.5rem 0 0;
+  color: var(--brand-slate);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.portal-work-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.portal-work-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 1.5rem;
+  background: var(--brand-warm-cream);
+  border: 1px solid var(--brand-electric-indigo);
+  border-radius: var(--portal-radius);
+  color: var(--brand-slate);
+  text-decoration: none;
+  box-shadow: var(--portal-shadow);
+  overflow-wrap: anywhere;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.portal-work-card:hover {
+  background: var(--brand-parchment);
+  border-color: var(--brand-twilight-blue);
+}
+
+.portal-work-card p {
+  margin: 0.75rem 0 1.25rem;
+  color: var(--brand-slate);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.portal-work-card-action {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-top: auto;
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-label);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.5;
+}
+
+/* 8. Access states, focus and responsive behavior ----------------------- */
+
+.portal-access-screen {
+  display: grid;
+  min-height: 100vh;
+  min-height: 100svh;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.portal-access-card {
+  width: 100%;
+  max-width: 36rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  background: var(--brand-warm-cream);
+  border: 1px solid var(--brand-linen);
+  border-radius: var(--portal-radius);
+  box-shadow: var(--portal-shadow);
+}
+
+.portal-access-card h1 {
+  margin: 0 0 1rem;
+  color: var(--brand-twilight-blue);
+  font-family: var(--portal-font-heading);
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.portal-access-card p:not(.portal-eyebrow) {
+  margin: 0 0 1rem;
+  color: var(--brand-slate);
+  font-size: 1.125rem;
+  overflow-wrap: anywhere;
+}
+
+.portal-primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--brand-twilight-blue);
+  border: 1px solid var(--brand-twilight-blue);
+  border-radius: 0.6rem;
+  color: var(--brand-warm-cream);
+  font-family: var(--portal-font-label);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.portal-primary-button:hover {
+  background: var(--brand-midnight-violet);
+}
+
+.portal-shell :where(a, button, input, select, textarea, summary):focus-visible,
+.portal-access-screen :where(a, button):focus-visible {
+  outline: 3px solid var(--brand-twilight-blue);
+  outline-offset: 3px;
+}
+
+.portal-skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  max-width: calc(100% - 1.5rem);
+  padding: 0.75rem 1rem;
+  background: var(--brand-twilight-blue);
+  border: 2px solid var(--brand-warm-cream);
+  border-radius: 0.5rem;
+  color: var(--brand-warm-cream);
+  font-size: 1rem;
+  transform: translateY(-200%);
+}
+
+.portal-skip-link:focus {
+  transform: translateY(0);
+}
+
+@media (max-width: 60rem) {
+  .portal-dashboard-intro {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .portal-dashboard-welcome {
+    padding-inline: 0;
+  }
+}
+
+@media (max-width: 42rem) {
+  .portal-content {
+    padding-top: 1.25rem;
+  }
+
+  .portal-topbar header > div > div:first-child {
+    align-items: flex-start;
+  }
+
+  .portal-work-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .portal-welcome-note,
+  .portal-work-card {
+    padding: 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-work-card {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .portal-work-card,
+  .portal-topbar a,
+  .portal-topbar button {
+    border-color: ButtonText;
+  }
+
+  .portal-shell :where(a, button, input, select, textarea, summary):focus-visible {
+    outline-color: Highlight;
+  }
 }
